@@ -1,0 +1,12 @@
+[project]
+name = "sentinel-core"
+version = "0.1.0"
+description = "Shared configuration, logging and infrastructure clients for Sentinel."
+requires-python = ">=3.13"
+dependencies = [
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "structlog>=24.1.0",
+    "asyncpg>=0.29.0",
+    "redis>=5.0.0",
+]

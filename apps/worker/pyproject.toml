@@ -1,0 +1,6 @@
+[project]
+name = "sentinel-worker"
+version = "0.1.0"
+description = "Sentinel worker — runs background investigations."
+requires-python = ">=3.13"
+dependencies = []

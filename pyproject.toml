@@ -1,0 +1,42 @@
+[project]
+name = "sentinel"
+version = "0.1.0"
+description = "Sentinel — an AI SRE platform that investigates production incidents."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = []
+
+# The root is a virtual project: it only aggregates the workspace, it is never built
+# or installed as a wheel. Application/library code lives in the workspace members
+# under apps/ and packages/ and is imported via the repo root (pythonpath ".").
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["apps/api", "apps/worker", "packages/core"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["apps", "packages"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "C4", "SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["apps", "packages"]
+mypy_path = "."
+explicit_package_bases = true
+namespace_packages = true
+
+[[tool.mypy.overrides]]
+module = ["asyncpg.*"]
+ignore_missing_imports = true
