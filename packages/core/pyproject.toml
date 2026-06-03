@@ -9,4 +9,6 @@ dependencies = [
     "structlog>=24.1.0",
     "asyncpg>=0.29.0",
     "redis>=5.0.0",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "alembic>=1.13.0",
 ]
