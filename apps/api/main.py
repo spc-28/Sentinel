@@ -5,11 +5,16 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+import redis.asyncio as redis
 import structlog
 from fastapi import FastAPI, Response, status
 from packages.core.config import get_settings
+from packages.core.db import dispose_engine
 from packages.core.health import check_postgres, check_redis
 from packages.core.logging import configure_logging
+from packages.core.queue import JobQueue
+
+from apps.api.routers import webhooks
 
 log = structlog.get_logger()
 
@@ -18,12 +23,20 @@ log = structlog.get_logger()
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
     configure_logging(level=settings.log_level, json_logs=settings.log_json)
+
+    redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+    app.state.redis = redis_client
+    app.state.queue = JobQueue(redis_client)
+
     log.info("api.startup", environment=settings.environment)
     yield
+    await redis_client.aclose()
+    await dispose_engine()
     log.info("api.shutdown")
 
 
 app = FastAPI(title="Sentinel API", version="0.1.0", lifespan=lifespan)
+app.include_router(webhooks.router)
 
 
 @app.get("/health")
