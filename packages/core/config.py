@@ -45,6 +45,9 @@ class Settings(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
 
+    # --- Integrations ------------------------------------------------------
+    github_token: str | None = None  # if set, deploys tool hits the real GitHub API
+
     @property
     def postgres_dsn(self) -> str:
         return (

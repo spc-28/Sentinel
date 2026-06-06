@@ -13,7 +13,7 @@ dependencies = []
 package = false
 
 [tool.uv.workspace]
-members = ["apps/api", "apps/worker", "packages/core"]
+members = ["apps/api", "apps/worker", "packages/core", "packages/tools"]
 
 [dependency-groups]
 dev = [
@@ -40,5 +40,5 @@ namespace_packages = true
 exclude = ["^migrations/"]
 
 [[tool.mypy.overrides]]
-module = ["asyncpg.*"]
+module = ["asyncpg.*", "prophet.*", "pandas.*"]
 ignore_missing_imports = true
