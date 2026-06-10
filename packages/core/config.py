@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     # --- Integrations ------------------------------------------------------
     github_token: str | None = None  # if set, deploys tool hits the real GitHub API
 
+    # --- LLM / agents ------------------------------------------------------
+    anthropic_api_key: str | None = None
+    llm_model: str = "anthropic/claude-sonnet-4-6"  # LiteLLM model id; override via env
+    agent_max_steps: int = 15
+
     @property
     def postgres_dsn(self) -> str:
         return (
