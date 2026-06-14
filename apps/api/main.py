@@ -14,7 +14,7 @@ from packages.core.health import check_postgres, check_redis
 from packages.core.logging import configure_logging
 from packages.core.queue import JobQueue
 
-from apps.api.routers import webhooks
+from apps.api.routers import investigations, webhooks
 
 log = structlog.get_logger()
 
@@ -37,6 +37,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Sentinel API", version="0.1.0", lifespan=lifespan)
 app.include_router(webhooks.router)
+app.include_router(investigations.router)
 
 
 @app.get("/health")

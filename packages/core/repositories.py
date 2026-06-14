@@ -90,6 +90,14 @@ class InvestigationRepository(BaseRepository[Investigation]):
 class HypothesisRepository(BaseRepository[Hypothesis]):
     model = Hypothesis
 
+    async def list_for_investigation(self, investigation_id: UUID) -> Sequence[Hypothesis]:
+        result = await self.session.execute(
+            select(Hypothesis)
+            .where(Hypothesis.investigation_id == investigation_id)
+            .order_by(Hypothesis.rank)
+        )
+        return result.scalars().all()
+
 
 class EvidenceRepository(BaseRepository[Evidence]):
     model = Evidence
