@@ -48,5 +48,6 @@ module = [
     "langchain_core.*",
     "langchain_litellm.*",
     "litellm.*",
+    "langgraph.*",
 ]
 ignore_missing_imports = true
