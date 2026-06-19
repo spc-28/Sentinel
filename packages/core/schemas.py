@@ -161,13 +161,6 @@ class HypothesisRead(HypothesisBase, _Read):
     pass
 
 
-class InvestigationDetail(BaseModel):
-    """An investigation together with its ranked hypotheses (API response)."""
-
-    investigation: InvestigationRead
-    hypotheses: list[HypothesisRead]
-
-
 # --- Evidence ------------------------------------------------------------
 class EvidenceBase(BaseModel):
     hypothesis_id: UUID
@@ -235,3 +228,12 @@ class RunbookUpdate(BaseModel):
 
 class RunbookRead(RunbookBase, _Read):
     pass
+
+
+# --- Composite responses -------------------------------------------------
+class InvestigationDetail(BaseModel):
+    """An investigation with its ranked hypotheses and final report (API response)."""
+
+    investigation: InvestigationRead
+    hypotheses: list[HypothesisRead]
+    report: RCAReportRead | None = None

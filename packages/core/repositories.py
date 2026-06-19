@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from packages.core.enums import InvestigationStatus
 from packages.core.models import (
     Alert,
     Base,
@@ -86,6 +87,12 @@ class IncidentRepository(BaseRepository[Incident]):
 class InvestigationRepository(BaseRepository[Investigation]):
     model = Investigation
 
+    async def list_running(self) -> Sequence[Investigation]:
+        result = await self.session.execute(
+            select(Investigation).where(Investigation.status == InvestigationStatus.running)
+        )
+        return result.scalars().all()
+
 
 class HypothesisRepository(BaseRepository[Hypothesis]):
     model = Hypothesis
@@ -105,6 +112,12 @@ class EvidenceRepository(BaseRepository[Evidence]):
 
 class RCAReportRepository(BaseRepository[RCAReport]):
     model = RCAReport
+
+    async def get_for_investigation(self, investigation_id: UUID) -> RCAReport | None:
+        result = await self.session.execute(
+            select(RCAReport).where(RCAReport.investigation_id == investigation_id)
+        )
+        return result.scalar_one_or_none()
 
 
 class RunbookRepository(BaseRepository[Runbook]):

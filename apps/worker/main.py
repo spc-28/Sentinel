@@ -13,7 +13,7 @@ from packages.core.db import dispose_engine
 from packages.core.logging import configure_logging
 from packages.core.queue import JobQueue
 
-from apps.worker.jobs.investigate import handle_investigate
+from apps.worker.jobs.investigate import handle_investigate, recover_running
 
 log = structlog.get_logger()
 
@@ -37,6 +37,7 @@ async def run() -> None:
     redis_client = redis.from_url(settings.redis_url, decode_responses=True)
     queue = JobQueue(redis_client)
     log.info("worker.startup", environment=settings.environment)
+    await recover_running()  # resume investigations interrupted by a previous crash
     try:
         while True:
             job = await queue.dequeue(block_seconds=5)

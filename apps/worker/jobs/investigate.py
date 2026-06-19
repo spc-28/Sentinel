@@ -1,13 +1,19 @@
-"""Investigate-alert job: run the agent and persist Investigation + Hypothesis rows."""
+"""Investigate-alert job: run the five-agent graph and persist the results.
+
+State is checkpointed in Postgres by the graph, so an investigation interrupted
+by a worker crash can be resumed (see ``recover_running``).
+"""
 
 from __future__ import annotations
 
-import asyncio
+from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 import structlog
-from packages.agents.simple_agent import run_investigation
+from packages.agents.graph import run_graph
+from packages.agents.state import GraphState, HypothesisItem, VerifiedHypothesis
 from packages.core.db import session_factory
 from packages.core.enums import InvestigationStatus
 from packages.core.repositories import (
@@ -15,67 +21,140 @@ from packages.core.repositories import (
     HypothesisRepository,
     IncidentRepository,
     InvestigationRepository,
+    RCAReportRepository,
     ServiceRepository,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 log = structlog.get_logger()
 
 
+async def _service_name(session: AsyncSession, service_id: UUID | None) -> str:
+    if service_id is None:
+        return "unknown"
+    service = await ServiceRepository(session).get(service_id)
+    return service.name if service is not None else "unknown"
+
+
+async def _alert_payload(session: AsyncSession, alert_id: UUID) -> dict[str, Any] | None:
+    alert = await AlertRepository(session).get(alert_id)
+    if alert is None:
+        return None
+    return {
+        "service": await _service_name(session, alert.service_id),
+        "title": alert.title,
+        "severity": alert.severity.value,
+        "details": dict(alert.payload),
+    }
+
+
 async def handle_investigate(alert_id: str) -> None:
-    """Create an incident + investigation for the alert, run the agent, save results."""
-    # 1. Load the alert and open an investigation.
+    """Open an incident + investigation for the alert, then run the graph."""
     async with session_factory() as session:
-        alert = await AlertRepository(session).get(UUID(alert_id))
-        if alert is None:
+        payload = await _alert_payload(session, UUID(alert_id))
+        if payload is None:
             log.warning("investigate.alert_not_found", alert_id=alert_id)
             return
-
-        service_name = "unknown"
-        if alert.service_id is not None:
-            service = await ServiceRepository(session).get(alert.service_id)
-            if service is not None:
-                service_name = service.name
-
         incident = await IncidentRepository(session).create(
-            alert_id=alert.id, service_id=alert.service_id, title=alert.title
+            alert_id=UUID(alert_id), title=payload["title"]
         )
         investigation = await InvestigationRepository(session).create(
             incident_id=incident.id,
             status=InvestigationStatus.running,
             started_at=datetime.now(UTC),
         )
-        # Capture primitives before the session closes.
         investigation_id = investigation.id
-        title, severity, payload = alert.title, alert.severity.value, dict(alert.payload)
         await session.commit()
 
-    log.info("investigate.started", investigation_id=str(investigation_id), service=service_name)
+    log.info(
+        "investigate.started", investigation_id=str(investigation_id), service=payload["service"]
+    )
+    await _run_and_persist(investigation_id, payload, resume=False)
 
-    # 2. Run the agent (sync/blocking) off the event loop.
-    try:
-        result = await asyncio.to_thread(run_investigation, service_name, title, severity, payload)
-    except Exception as exc:  # noqa: BLE001 - record failure, don't crash the worker
-        log.error("investigate.failed", investigation_id=str(investigation_id), error=str(exc))
-        async with session_factory() as session:
-            await InvestigationRepository(session).update(
-                investigation_id,
-                status=InvestigationStatus.failed,
-                completed_at=datetime.now(UTC),
-                error=str(exc),
-            )
-            await session.commit()
-        return
 
-    # 3. Persist hypotheses and mark the investigation complete.
+async def resume_investigation(investigation_id: UUID) -> None:
+    """Resume an interrupted investigation from its last checkpoint."""
     async with session_factory() as session:
-        hypotheses = HypothesisRepository(session)
-        for draft in result.hypotheses[:3]:
-            await hypotheses.create(
+        investigation = await InvestigationRepository(session).get(investigation_id)
+        if investigation is None:
+            return
+        incident = await IncidentRepository(session).get(investigation.incident_id)
+        payload = await _alert_payload(session, incident.alert_id) if incident is not None else None
+    if payload is None:
+        log.warning("investigate.resume_no_alert", investigation_id=str(investigation_id))
+        return
+    log.info("investigate.resuming", investigation_id=str(investigation_id))
+    await _run_and_persist(investigation_id, payload, resume=True)
+
+
+async def recover_running() -> None:
+    """On startup, resume any investigations left in the 'running' state."""
+    async with session_factory() as session:
+        running_ids = [inv.id for inv in await InvestigationRepository(session).list_running()]
+    for investigation_id in running_ids:
+        try:
+            await resume_investigation(investigation_id)
+        except Exception as exc:  # noqa: BLE001 - keep recovering the rest
+            log.error(
+                "investigate.recover_failed", investigation_id=str(investigation_id), error=str(exc)
+            )
+
+
+async def _run_and_persist(
+    investigation_id: UUID, payload: dict[str, Any], *, resume: bool
+) -> None:
+    try:
+        final = await run_graph(payload, str(investigation_id), resume=resume)
+    except Exception as exc:  # noqa: BLE001 - record failure, don't crash the worker
+        if resume:  # no usable checkpoint → start a fresh run
+            log.warning("investigate.resume_fresh", investigation_id=str(investigation_id))
+            try:
+                final = await run_graph(payload, str(investigation_id), resume=False)
+            except Exception as exc2:  # noqa: BLE001
+                await _mark_failed(investigation_id, str(exc2))
+                return
+        else:
+            await _mark_failed(investigation_id, str(exc))
+            return
+    await _persist(investigation_id, final)
+
+
+async def _mark_failed(investigation_id: UUID, error: str) -> None:
+    log.error("investigate.failed", investigation_id=str(investigation_id), error=error)
+    async with session_factory() as session:
+        await InvestigationRepository(session).update(
+            investigation_id,
+            status=InvestigationStatus.failed,
+            completed_at=datetime.now(UTC),
+            error=error,
+        )
+        await session.commit()
+
+
+async def _persist(investigation_id: UUID, final: GraphState) -> None:
+    verified = final.get("verified") or []
+    hypotheses: Sequence[HypothesisItem | VerifiedHypothesis] = (
+        verified if verified else (final.get("hypotheses") or [])
+    )
+    report = final.get("report")
+
+    async with session_factory() as session:
+        hyp_repo = HypothesisRepository(session)
+        for rank, hyp in enumerate(hypotheses[:3], start=1):  # DB allows rank 1..3
+            await hyp_repo.create(
                 investigation_id=investigation_id,
-                statement=draft.statement,
-                description=draft.description,
-                confidence=draft.confidence,
-                rank=draft.rank,
+                statement=hyp.statement,
+                description=hyp.description,
+                confidence=hyp.confidence,
+                rank=rank,
+            )
+        if report is not None:
+            await RCAReportRepository(session).create(
+                investigation_id=investigation_id,
+                summary=report.markdown,  # full rendered report
+                root_cause=report.root_cause,
+                timeline=[{"event": item} for item in report.timeline],
+                recommended_fix=report.suggested_fix,
             )
         await InvestigationRepository(session).update(
             investigation_id,
@@ -87,6 +166,6 @@ async def handle_investigate(alert_id: str) -> None:
     log.info(
         "investigate.completed",
         investigation_id=str(investigation_id),
-        steps=result.steps_used,
-        hypotheses=len(result.hypotheses),
+        hypotheses=len(hypotheses[:3]),
+        has_report=report is not None,
     )
