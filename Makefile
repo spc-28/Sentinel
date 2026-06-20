@@ -1,52 +1,37 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
-UV := uv
 
-.DEFAULT_GOAL := help
-.PHONY: help install infra up down worker lint format logs ps clean migrate migration seed
+.PHONY: install up down worker migrate migration seed eval lint format
 
-help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
-		awk 'BEGIN {FS = ":.*?## "} {printf "  \033[36m%-10s\033[0m %s\n", $$1, $$2}'
+install:  # sync all workspace deps
+	uv sync --all-packages
 
-install: ## Sync all workspace dependencies into .venv
-	$(UV) sync --all-packages
-
-infra: ## Start datastores only (Postgres, Redis, Qdrant)
+up: install  # start datastores(Postgres, Redis, Qdrant) + run the API
 	$(COMPOSE) up -d
+	uv run uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
 
-up: install ## Start datastores, then run the API (foreground, with reload)
-	$(COMPOSE) up -d
-	$(UV) run uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
-
-worker: install ## Run the background worker (foreground)
-	$(UV) run python -m apps.worker.main
-
-migrate: ## Apply database migrations (alembic upgrade head)
-	$(UV) run alembic upgrade head
-
-migration: ## Autogenerate a migration: make migration NAME="message"
-	$(UV) run alembic revision --autogenerate -m "$(NAME)"
-
-seed: ## Insert sample services and runbooks
-	$(UV) run python -m scripts.seed
-
-down: ## Stop datastores
+down:  # stop datastores
 	$(COMPOSE) down
 
-lint: ## Run ruff (lint + format check) and mypy
-	$(UV) run ruff check .
-	$(UV) run ruff format --check .
-	$(UV) run mypy
+worker: install  # run the background worker
+	uv run python -m apps.worker.main
 
-format: ## Auto-format and auto-fix with ruff
-	$(UV) run ruff format .
-	$(UV) run ruff check --fix .
+migrate:  # apply migrations
+	uv run alembic upgrade head
 
-logs: ## Tail datastore logs
-	$(COMPOSE) logs -f
+migration:  # create a migration: make migration NAME="message"
+	uv run alembic revision --autogenerate -m "$(NAME)"
 
-ps: ## Show datastore status
-	$(COMPOSE) ps
+seed:  # insert sample services and runbooks
+	uv run python -m scripts.seed
 
-clean: ## Stop datastores and delete their volumes
-	$(COMPOSE) down -v
+eval:  # run the eval harness over docs/eval/cases.jsonl
+	uv run python -m scripts.eval
+
+lint:  # ruff + mypy
+	uv run ruff check .
+	uv run ruff format --check .
+	uv run mypy
+
+format:  # auto-format and fix
+	uv run ruff format .
+	uv run ruff check --fix .
