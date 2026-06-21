@@ -30,6 +30,7 @@ from packages.core.enums import (
     AlertStatus,
     EvidenceSource,
     EvidenceStance,
+    GroupStatus,
     IncidentStatus,
     InvestigationStatus,
 )
@@ -65,6 +66,9 @@ class Alert(UUIDMixin, TimestampMixin, Base):
     service_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("services.id", ondelete="SET NULL"), index=True
     )
+    group_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("incident_groups.id", ondelete="SET NULL"), index=True
+    )
     title: Mapped[str] = mapped_column(String(512))
     severity: Mapped[AlertSeverity] = mapped_column(Enum(AlertSeverity, name="alert_severity"))
     status: Mapped[AlertStatus] = mapped_column(
@@ -91,6 +95,29 @@ class Incident(UUIDMixin, TimestampMixin, Base):
     )
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class IncidentGroup(UUIDMixin, TimestampMixin, Base):
+    """A set of related alerts collapsed into one investigation (noise reduction)."""
+
+    __tablename__ = "incident_groups"
+
+    title: Mapped[str] = mapped_column(String(512))
+    service_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("services.id", ondelete="SET NULL"), index=True
+    )
+    # Separate PG enum name from alerts.severity to avoid CREATE TYPE collisions.
+    severity: Mapped[AlertSeverity] = mapped_column(Enum(AlertSeverity, name="group_severity"))
+    status: Mapped[GroupStatus] = mapped_column(
+        Enum(GroupStatus, name="group_status"), default=GroupStatus.open
+    )
+    leader_alert_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("alerts.id", ondelete="SET NULL"), index=True
+    )
+    last_activity_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    alert_count: Mapped[int] = mapped_column(Integer, default=1)
 
 
 class Investigation(UUIDMixin, TimestampMixin, Base):

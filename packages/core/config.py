@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     llm_model: str = "anthropic/claude-sonnet-4-6"  # LiteLLM model id; override via env
     agent_max_steps: int = 15
 
+    # --- Alert correlation -------------------------------------------------
+    correlation_window_minutes: int = 5
+    semantic_correlation_enabled: bool = False  # needs sentence-transformers installed
+    semantic_similarity_threshold: float = 0.6
+
     @property
     def postgres_dsn(self) -> str:
         return (

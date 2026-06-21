@@ -34,6 +34,11 @@ class InvestigationStatus(enum.StrEnum):
     failed = "failed"
 
 
+class GroupStatus(enum.StrEnum):
+    open = "open"
+    closed = "closed"
+
+
 class EvidenceSource(enum.StrEnum):
     logs = "logs"
     metrics = "metrics"
