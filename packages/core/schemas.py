@@ -17,6 +17,7 @@ from packages.core.enums import (
     AlertStatus,
     EvidenceSource,
     EvidenceStance,
+    GroupStatus,
     IncidentStatus,
     InvestigationStatus,
 )
@@ -112,6 +113,22 @@ class IncidentUpdate(BaseModel):
 class IncidentRead(IncidentBase, _Read):
     status: IncidentStatus
     resolved_at: datetime | None = None
+
+
+# --- Incident group ------------------------------------------------------
+class IncidentGroupRead(_Read):
+    title: str
+    service_id: UUID | None
+    severity: AlertSeverity
+    status: GroupStatus
+    leader_alert_id: UUID | None
+    last_activity_at: datetime
+    alert_count: int
+
+
+class IncidentGroupDetail(BaseModel):
+    group: IncidentGroupRead
+    alerts: list[AlertRead]
 
 
 # --- Investigation -------------------------------------------------------

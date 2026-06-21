@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from packages.core.enums import InvestigationStatus
+from packages.core.enums import GroupStatus, InvestigationStatus
 from packages.core.models import (
     Alert,
     Base,
     Evidence,
     Hypothesis,
     Incident,
+    IncidentGroup,
     Investigation,
     RCAReport,
     Runbook,
@@ -79,9 +81,28 @@ class ServiceRepository(BaseRepository[Service]):
 class AlertRepository(BaseRepository[Alert]):
     model = Alert
 
+    async def list_for_group(self, group_id: UUID) -> Sequence[Alert]:
+        result = await self.session.execute(
+            select(Alert).where(Alert.group_id == group_id).order_by(Alert.created_at)
+        )
+        return result.scalars().all()
+
 
 class IncidentRepository(BaseRepository[Incident]):
     model = Incident
+
+
+class IncidentGroupRepository(BaseRepository[IncidentGroup]):
+    model = IncidentGroup
+
+    async def list_open_since(self, since: datetime) -> Sequence[IncidentGroup]:
+        result = await self.session.execute(
+            select(IncidentGroup)
+            .where(IncidentGroup.status == GroupStatus.open)
+            .where(IncidentGroup.last_activity_at >= since)
+            .order_by(IncidentGroup.last_activity_at.desc())
+        )
+        return result.scalars().all()
 
 
 class InvestigationRepository(BaseRepository[Investigation]):
