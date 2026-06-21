@@ -49,5 +49,7 @@ module = [
     "langchain_litellm.*",
     "litellm.*",
     "langgraph.*",
+    "sentence_transformers.*",
+    "hdbscan.*",
 ]
 ignore_missing_imports = true
