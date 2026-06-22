@@ -13,7 +13,14 @@ dependencies = []
 package = false
 
 [tool.uv.workspace]
-members = ["apps/api", "apps/worker", "packages/core", "packages/tools", "packages/agents"]
+members = [
+    "apps/api",
+    "apps/worker",
+    "packages/core",
+    "packages/tools",
+    "packages/agents",
+    "packages/graph",
+]
 
 [dependency-groups]
 dev = [
@@ -51,5 +58,6 @@ module = [
     "langgraph.*",
     "sentence_transformers.*",
     "hdbscan.*",
+    "neo4j.*",
 ]
 ignore_missing_imports = true

@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
 
+    # --- Neo4j (service dependency graph) ----------------------------------
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "sentinelpass"
+
     # --- Integrations ------------------------------------------------------
     github_token: str | None = None  # if set, deploys tool hits the real GitHub API
 

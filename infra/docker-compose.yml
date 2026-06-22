@@ -39,6 +39,24 @@ services:
     volumes:
       - qdrantdata:/qdrant/storage
 
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: ${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-sentinelpass}
+    ports:
+      - "7474:7474"   # HTTP browser
+      - "${NEO4J_PORT:-7687}:7687"  # Bolt
+    volumes:
+      - neo4jdata:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "${NEO4J_USER:-neo4j}",
+             "-p", "${NEO4J_PASSWORD:-sentinelpass}", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
 volumes:
   pgdata:
   qdrantdata:
+  neo4jdata:

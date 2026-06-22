@@ -1,0 +1,9 @@
+[project]
+name = "sentinel-graph"
+version = "0.1.0"
+description = "Sentinel service dependency map (Neo4j)."
+requires-python = ">=3.13"
+dependencies = [
+    "neo4j>=5.20.0",
+    "structlog>=24.1.0",
+]
