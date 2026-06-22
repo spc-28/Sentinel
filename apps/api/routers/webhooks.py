@@ -18,6 +18,7 @@ from packages.core.repositories import (
     ServiceRepository,
 )
 from packages.core.schemas import AlertWebhook
+from packages.graph.store import neighbors
 
 from apps.api.deps import QueueDep, SessionDep
 
@@ -81,7 +82,12 @@ async def receive_alert(
         severity=alert.severity,
         triggered_at=triggered,
     )
-    decision = correlate(alert_view, await _group_views(session, open_groups), settings)
+    try:
+        connected = await neighbors(service_name)
+    except Exception as exc:  # noqa: BLE001 - graph optional; fall back to time/semantic
+        log.warning("webhook.graph_unavailable", error=str(exc))
+        connected = set()
+    decision = correlate(alert_view, await _group_views(session, open_groups), settings, connected)
 
     if decision.matched_group_id is not None:
         group = await groups_repo.get(decision.matched_group_id)

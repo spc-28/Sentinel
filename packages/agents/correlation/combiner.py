@@ -12,13 +12,13 @@ log = structlog.get_logger()
 
 
 def _score_group(
-    alert: AlertView, group: GroupView, settings: Settings
+    alert: AlertView, group: GroupView, settings: Settings, connected_services: set[str]
 ) -> tuple[float, str | None]:
     """Best match score (and method) for the alert against one group."""
     window = settings.correlation_window_minutes
     if by_time.matches(alert, group, window):
         return 1.0, "time"
-    if by_dependency.matches(alert, group, window):
+    if by_dependency.matches(alert, group, window, connected_services):
         return 0.7, "dependency"
     if settings.semantic_correlation_enabled:
         ok, sim = by_meaning.matches(alert, group, settings.semantic_similarity_threshold, window)
@@ -27,13 +27,19 @@ def _score_group(
     return 0.0, None
 
 
-def correlate(alert: AlertView, groups: list[GroupView], settings: Settings) -> GroupDecision:
+def correlate(
+    alert: AlertView,
+    groups: list[GroupView],
+    settings: Settings,
+    connected_services: set[str] | None = None,
+) -> GroupDecision:
     """Return the best existing group for ``alert``, or a decision to start a new one."""
+    connected = connected_services or set()
     best_id = None
     best_score = 0.0
     best_method: str | None = None
     for group in groups:
-        score, method = _score_group(alert, group, settings)
+        score, method = _score_group(alert, group, settings, connected)
         if score > best_score:
             best_id, best_score, best_method = group.id, score, method
 
