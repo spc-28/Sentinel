@@ -1,0 +1,10 @@
+{"hypothesis": "The database connection pool was exhausted.", "evidence": "Logs show repeated 'database connection timeout' errors and the connection pool was at maximum capacity.", "should_support": true}
+{"hypothesis": "A recent deploy introduced the regression.", "evidence": "A deploy shipped ten minutes before the incident, and that change introduced the regression that broke checkout.", "should_support": true}
+{"hypothesis": "Redis ran out of memory.", "evidence": "CPU and memory usage were normal throughout and no cache evictions were observed.", "should_support": false}
+{"hypothesis": "The payment provider was timing out.", "evidence": "Upstream calls to the payment gateway returned 504 gateway timeout responses repeatedly.", "should_support": true}
+{"hypothesis": "Authentication signing keys were misconfigured.", "evidence": "Search latency increased but authentication succeeded normally the whole time.", "should_support": false}
+{"hypothesis": "The host ran out of disk space.", "evidence": "The host's disk usage reached 100 percent, so it ran out of free disk space and write operations began failing.", "should_support": true}
+{"hypothesis": "A network partition isolated the service.", "evidence": "All nodes were reachable and network metrics stayed nominal during the window.", "should_support": false}
+{"hypothesis": "Slow database queries caused the high request latency.", "evidence": "Slow database queries caused request latency to triple, and query spans dominated the slow traces.", "should_support": true}
+{"hypothesis": "The incident was caused by a memory leak.", "evidence": "Memory usage was flat and steady throughout the incident window.", "should_support": false}
+{"hypothesis": "A drop in cache hit rate increased database load.", "evidence": "Cache misses spiked sharply and downstream database load increased at the same time.", "should_support": true}

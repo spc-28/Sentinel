@@ -1,0 +1,10 @@
+{"query": "checkout latency is high", "expected": "High API latency"}
+{"query": "database connections exhausted", "expected": "Database connection pool exhausted"}
+{"query": "lots of 500 server errors", "expected": "Elevated 5xx error rate"}
+{"query": "redis running out of memory", "expected": "Redis memory pressure"}
+{"query": "payment provider timing out", "expected": "Payment provider timeouts"}
+{"query": "users cannot log in", "expected": "Authentication failures spike"}
+{"query": "search results are stale", "expected": "Search results stale"}
+{"query": "notification queue backing up", "expected": "Notification backlog growing"}
+{"query": "disk is almost full", "expected": "Disk space low"}
+{"query": "how do I roll back a bad deploy", "expected": "Deploy rollback procedure"}
