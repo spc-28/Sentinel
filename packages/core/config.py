@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     semantic_correlation_enabled: bool = False  # needs sentence-transformers installed
     semantic_similarity_threshold: float = 0.6
 
+    # --- RAG ---------------------------------------------------------------
+    nli_support_threshold: float = 0.5  # entailment prob above which a claim is "supported"
+    log_index_window_days: int = 7  # rolling window for embedded logs
+
     @property
     def postgres_dsn(self) -> str:
         return (

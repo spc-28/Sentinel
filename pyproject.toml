@@ -20,6 +20,7 @@ members = [
     "packages/tools",
     "packages/agents",
     "packages/graph",
+    "packages/rag",
 ]
 
 [dependency-groups]
@@ -59,5 +60,8 @@ module = [
     "sentence_transformers.*",
     "hdbscan.*",
     "neo4j.*",
+    "qdrant_client.*",
+    "rank_bm25.*",
+    "torch.*",
 ]
 ignore_missing_imports = true
