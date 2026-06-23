@@ -19,12 +19,15 @@ from packages.core.queue import JobQueue
 from packages.graph.client import close_driver
 from packages.graph.refresh import refresh_map
 from packages.graph.store import seed_dependencies
+from packages.rag import store as rag_store
+from packages.rag.logs_index import index_recent_logs
 
 from apps.worker.jobs.investigate import handle_investigate, recover_running
 
 log = structlog.get_logger()
 
 _REFRESH_SECONDS = 3600
+_LOG_INDEX_SECONDS = 300
 
 
 async def _dispatch(job: dict[str, Any]) -> None:
@@ -50,6 +53,16 @@ async def _graph_refresh_loop() -> None:
             log.error("worker.graph_refresh_failed", error=str(exc))
 
 
+async def _log_index_loop() -> None:
+    """Every 5 minutes: embed new logs into Qdrant over the rolling window."""
+    while True:
+        try:
+            await index_recent_logs()
+        except Exception as exc:  # noqa: BLE001 - RAG optional
+            log.error("worker.log_index_failed", error=str(exc))
+        await asyncio.sleep(_LOG_INDEX_SECONDS)
+
+
 async def run() -> None:
     settings = get_settings()
     configure_logging(level=settings.log_level, json_logs=settings.log_json)
@@ -64,6 +77,7 @@ async def run() -> None:
 
     await recover_running()  # resume investigations interrupted by a previous crash
     refresh_task = asyncio.create_task(_graph_refresh_loop())
+    log_index_task = asyncio.create_task(_log_index_loop())
     try:
         while True:
             job = await queue.dequeue(block_seconds=5)
@@ -77,12 +91,14 @@ async def run() -> None:
         log.info("worker.shutdown")
         raise
     finally:
-        refresh_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await refresh_task
+        for task in (refresh_task, log_index_task):
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
         await redis_client.aclose()
         await dispose_engine()
         await close_driver()
+        await rag_store.close()
 
 
 def main() -> None:

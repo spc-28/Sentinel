@@ -1,8 +1,8 @@
-"""Verifier — scores each hypothesis against the gathered evidence.
+"""Verifier — scores each hypothesis against the evidence with an NLI model.
 
-Placeholder scoring (keyword overlap between the hypothesis and the evidence text)
-to be replaced by RAG / an LLM judge in a later part. A hypothesis is "supported"
-when its overlap score clears the threshold.
+Each hypothesis is split into small claims; each claim is checked for entailment
+against the concatenated evidence with DeBERTa-MNLI; the claim scores are averaged.
+No LLM call per hypothesis — cheap and deterministic at scale.
 """
 
 from __future__ import annotations
@@ -12,61 +12,34 @@ import re
 import structlog
 
 from packages.agents.state import GraphState, VerifiedHypothesis
+from packages.core.config import get_settings
+from packages.rag.nli import support_score
 
 log = structlog.get_logger()
 
-_SUPPORT_THRESHOLD = 0.34
-_STOPWORDS = {
-    "the",
-    "a",
-    "an",
-    "of",
-    "to",
-    "in",
-    "on",
-    "and",
-    "or",
-    "is",
-    "are",
-    "was",
-    "were",
-    "by",
-    "for",
-    "with",
-    "due",
-    "from",
-    "at",
-    "this",
-    "that",
-    "it",
-}
+
+def _claims(text: str) -> list[str]:
+    parts = re.split(r"(?<=[.!?])\s+|[;\n]", text)
+    return [p.strip() for p in parts if len(p.strip()) > 3]
 
 
-def _keywords(text: str) -> set[str]:
-    words = re.findall(r"[a-z0-9]+", text.lower())
-    return {w for w in words if len(w) > 2 and w not in _STOPWORDS}
-
-
-def _score(statement: str, evidence_words: set[str]) -> float:
-    keys = _keywords(statement)
-    if not keys:
-        return 0.0
-    return len(keys & evidence_words) / len(keys)
+def _evidence_text(state: GraphState) -> str:
+    return "\n".join(
+        f"{e.source}: {e.summary} {e.detail or ''}".strip() for e in state.get("evidence", [])
+    )
 
 
 def verify(state: GraphState) -> dict[str, object]:
-    evidence = state.get("evidence", [])
-    evidence_words = _keywords(" ".join(f"{e.summary} {e.detail or ''}" for e in evidence))
+    threshold = get_settings().nli_support_threshold
+    evidence = _evidence_text(state)
 
     verified: list[VerifiedHypothesis] = []
     for hyp in state.get("hypotheses", []):
-        score = round(_score(f"{hyp.statement} {hyp.description or ''}", evidence_words), 3)
+        claims = _claims(f"{hyp.statement}. {hyp.description or ''}")
+        scores = [support_score(evidence, claim) for claim in claims] if evidence else []
+        score = round(sum(scores) / len(scores), 3) if scores else 0.0
         verdict = (
-            "supported"
-            if score >= _SUPPORT_THRESHOLD
-            else "inconclusive"
-            if score > 0
-            else "unsupported"
+            "supported" if score >= threshold else "inconclusive" if score > 0.15 else "unsupported"
         )
         verified.append(
             VerifiedHypothesis(

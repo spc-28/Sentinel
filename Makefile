@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: install up down worker migrate migration seed graph-seed eval lint format
+.PHONY: install up down worker migrate migration seed graph-seed ingest-runbooks eval eval-retrieval eval-verifier lint format
 
 install:  # sync all workspace deps
 	uv sync --all-packages
@@ -27,8 +27,17 @@ seed:  # insert sample services and runbooks
 graph-seed:  # seed the Neo4j dependency map
 	uv run python -m scripts.seed_graph
 
-eval:  # run the eval harness over docs/eval/cases.jsonl
-	uv run python -m scripts.eval
+ingest-runbooks:  # embed runbooks into Qdrant
+	uv run python -m scripts.ingest_runbooks
+
+eval:  # graph root-cause eval (needs ANTHROPIC_API_KEY)
+	uv run python -m scripts.eval graph
+
+eval-retrieval:  # retrieval recall@3 eval
+	uv run python -m scripts.eval retrieval
+
+eval-verifier:  # verifier NLI accuracy eval
+	uv run python -m scripts.eval verifier
 
 lint:  # ruff + mypy
 	uv run ruff check .

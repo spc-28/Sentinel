@@ -60,9 +60,36 @@ def _deeper_round(service: str) -> list[EvidenceItem]:
     ]
 
 
-def investigate(state: GraphState) -> dict[str, object]:
-    service = str(state["alert"].get("service", "unknown"))
+async def _rag_evidence(query: str) -> list[EvidenceItem]:
+    """Search runbooks and similar past logs for relevant context (best effort)."""
+    items: list[EvidenceItem] = []
+    try:
+        from packages.rag.retriever import search_logs, search_runbooks
+
+        for hit in await search_runbooks(query, top_k=2):
+            items.append(
+                EvidenceItem(source="runbook", summary=f"runbook: {hit.title}", detail=hit.content)
+            )
+        similar = await search_logs(query, top_k=3)
+        if similar:
+            items.append(
+                EvidenceItem(
+                    source="logs",
+                    summary="similar past logs",
+                    detail="; ".join(f"[{h.service}] {h.message}" for h in similar),
+                )
+            )
+    except Exception as exc:  # noqa: BLE001 - RAG optional
+        log.warning("investigator.rag_unavailable", error=str(exc))
+    return items
+
+
+async def investigate(state: GraphState) -> dict[str, object]:
+    alert = state["alert"]
+    service = str(alert.get("service", "unknown"))
     round_number = state.get("investigator_rounds", 0) + 1
     items = _first_round(service) if round_number == 1 else _deeper_round(service)
+    if round_number == 1:
+        items.extend(await _rag_evidence(f"{alert.get('title', '')} {service}"))
     log.info("node.investigator", service=service, round=round_number, gathered=len(items))
     return {"evidence": items, "investigator_rounds": round_number}
