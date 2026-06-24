@@ -87,6 +87,12 @@ async def prune_older_than(name: str, cutoff_epoch: float) -> None:
     )
 
 
+async def count(name: str) -> int:
+    if not await client().collection_exists(name):
+        return 0
+    return int((await client().count(name)).count)
+
+
 async def close() -> None:
     global _client
     if _client is not None:
