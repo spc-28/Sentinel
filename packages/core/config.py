@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     nli_support_threshold: float = 0.5  # entailment prob above which a claim is "supported"
     log_index_window_days: int = 7  # rolling window for embedded logs
 
+    # --- AI-pipeline detectors ---------------------------------------------
+    drift_wasserstein_threshold: float = 0.05
+    rag_quality_threshold: float = 0.5
+    cost_spike_ratio: float = 2.5
+
     @property
     def postgres_dsn(self) -> str:
         return (

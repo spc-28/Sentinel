@@ -16,6 +16,7 @@ package = false
 members = [
     "apps/api",
     "apps/worker",
+    "apps/mcp-ai-pipeline",
     "packages/core",
     "packages/tools",
     "packages/agents",
@@ -45,7 +46,7 @@ files = ["apps", "packages", "scripts"]
 mypy_path = "."
 explicit_package_bases = true
 namespace_packages = true
-exclude = ["^migrations/"]
+exclude = ["^migrations/", "^apps/mcp-ai-pipeline/"]
 
 [[tool.mypy.overrides]]
 module = [
@@ -63,5 +64,7 @@ module = [
     "qdrant_client.*",
     "rank_bm25.*",
     "torch.*",
+    "scipy.*",
+    "mcp.*",
 ]
 ignore_missing_imports = true

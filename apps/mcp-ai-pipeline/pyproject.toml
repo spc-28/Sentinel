@@ -1,0 +1,9 @@
+[project]
+name = "sentinel-mcp-ai-pipeline"
+version = "0.1.0"
+description = "MCP server exposing Sentinel's AI-pipeline health checks to AI clients."
+requires-python = ">=3.13"
+dependencies = [
+    "mcp>=1.2.0",
+    "structlog>=24.1.0",
+]
