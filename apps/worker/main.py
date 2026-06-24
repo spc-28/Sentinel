@@ -12,6 +12,7 @@ from typing import Any
 
 import redis.asyncio as redis
 import structlog
+from packages.agents.ai_pipeline.detectors import run_all_detectors
 from packages.core.config import get_settings
 from packages.core.db import dispose_engine
 from packages.core.logging import configure_logging
@@ -21,6 +22,7 @@ from packages.graph.refresh import refresh_map
 from packages.graph.store import seed_dependencies
 from packages.rag import store as rag_store
 from packages.rag.logs_index import index_recent_logs
+from packages.tools.common import KNOWN_SERVICES
 
 from apps.worker.jobs.investigate import handle_investigate, recover_running
 
@@ -28,6 +30,7 @@ log = structlog.get_logger()
 
 _REFRESH_SECONDS = 3600
 _LOG_INDEX_SECONDS = 300
+_AI_DETECTOR_SECONDS = 3600
 
 
 async def _dispatch(job: dict[str, Any]) -> None:
@@ -63,6 +66,16 @@ async def _log_index_loop() -> None:
         await asyncio.sleep(_LOG_INDEX_SECONDS)
 
 
+async def _ai_detector_loop() -> None:
+    """Hourly: run the AI-pipeline detectors (embedding drift, RAG quality, cost, prompt)."""
+    while True:
+        try:
+            await run_all_detectors(indexes=["runbooks"], services=list(KNOWN_SERVICES))
+        except Exception as exc:  # noqa: BLE001 - detectors optional
+            log.error("worker.ai_detectors_failed", error=str(exc))
+        await asyncio.sleep(_AI_DETECTOR_SECONDS)
+
+
 async def run() -> None:
     settings = get_settings()
     configure_logging(level=settings.log_level, json_logs=settings.log_json)
@@ -78,6 +91,7 @@ async def run() -> None:
     await recover_running()  # resume investigations interrupted by a previous crash
     refresh_task = asyncio.create_task(_graph_refresh_loop())
     log_index_task = asyncio.create_task(_log_index_loop())
+    ai_detector_task = asyncio.create_task(_ai_detector_loop())
     try:
         while True:
             job = await queue.dequeue(block_seconds=5)
@@ -91,7 +105,7 @@ async def run() -> None:
         log.info("worker.shutdown")
         raise
     finally:
-        for task in (refresh_task, log_index_task):
+        for task in (refresh_task, log_index_task, ai_detector_task):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task

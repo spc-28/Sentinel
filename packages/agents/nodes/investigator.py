@@ -84,12 +84,57 @@ async def _rag_evidence(query: str) -> list[EvidenceItem]:
     return items
 
 
+async def _ai_evidence(alert: dict[str, object], service: str) -> list[EvidenceItem]:
+    """Specialist branch for AI-type alerts: vector health, prompt/model versions, cost."""
+    from packages.agents.ai_pipeline.detectors import (
+        check_embedding_drift,
+        check_prompt_regression,
+        check_rag_quality,
+        get_ai_cost,
+    )
+
+    details = alert.get("details", {})
+    index = details.get("index", "runbooks") if isinstance(details, dict) else "runbooks"
+    try:
+        drift = await check_embedding_drift(str(index))
+        quality = await check_rag_quality(str(index))
+        prompt = await check_prompt_regression(service)
+        cost = await get_ai_cost(service)
+    except Exception as exc:  # noqa: BLE001 - detectors optional
+        log.warning("investigator.ai_detectors_unavailable", error=str(exc))
+        return []
+    return [
+        EvidenceItem(
+            source="ai_pipeline",
+            summary=f"embedding drift: {drift.drift_detected}",
+            detail=f"wasserstein {drift.wasserstein} (>{drift.threshold}?) — {drift.note}",
+        ),
+        EvidenceItem(
+            source="ai_pipeline",
+            summary=f"RAG faithfulness: {quality.faithfulness}",
+            detail=quality.note,
+        ),
+        EvidenceItem(
+            source="ai_pipeline",
+            summary=f"prompt regression: {prompt.regressed}",
+            detail=prompt.note,
+        ),
+        EvidenceItem(
+            source="ai_pipeline", summary=f"AI cost spike: {cost.spike_detected}", detail=cost.note
+        ),
+    ]
+
+
 async def investigate(state: GraphState) -> dict[str, object]:
+    from packages.agents.ai_pipeline import is_ai_alert
+
     alert = state["alert"]
     service = str(alert.get("service", "unknown"))
     round_number = state.get("investigator_rounds", 0) + 1
     items = _first_round(service) if round_number == 1 else _deeper_round(service)
     if round_number == 1:
         items.extend(await _rag_evidence(f"{alert.get('title', '')} {service}"))
+        if is_ai_alert(alert):
+            items.extend(await _ai_evidence(alert, service))
     log.info("node.investigator", service=service, round=round_number, gathered=len(items))
     return {"evidence": items, "investigator_rounds": round_number}

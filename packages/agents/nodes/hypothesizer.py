@@ -46,10 +46,19 @@ async def hypothesize(state: GraphState) -> dict[str, object]:
     evidence_text = "\n".join(
         f"- [{e.source}] {e.summary}" + (f" ({e.detail})" if e.detail else "") for e in evidence
     )
+    from packages.agents.ai_pipeline import is_ai_alert
+
     context = await _dependency_context(str(alert.get("service", "unknown")))
+    ai_hint = ""
+    if is_ai_alert(alert):
+        ai_hint = (
+            "\n\nThis is an AI-pipeline alert. Consider AI-specific causes: an embedding "
+            "model changed and the index wasn't rebuilt (drift); a new prompt version shipped "
+            "with a regression; RAG retrieval quality dropped; or an AI cost spike."
+        )
     result = await structured(
         _SYSTEM,
-        f"Alert: {json.dumps(alert)}\n\nDependency context:\n{context}\n\n"
+        f"Alert: {json.dumps(alert)}\n\nDependency context:\n{context}{ai_hint}\n\n"
         f"Evidence:\n{evidence_text}",
         _Hypotheses,
     )
