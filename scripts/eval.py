@@ -110,7 +110,49 @@ async def eval_verifier() -> None:
     print(f"\nverifier accuracy: {correct}/{len(pairs)} = {correct / len(pairs):.0%}\n")
 
 
-_COMMANDS = {"graph": eval_graph, "retrieval": eval_retrieval, "verifier": eval_verifier}
+# --- ai pipeline: detection accuracy (headline metric) -------------------
+async def eval_ai() -> None:
+    from packages.agents.ai_pipeline import chaos
+    from packages.agents.ai_pipeline.detectors import (
+        check_embedding_drift,
+        check_prompt_regression,
+        check_rag_quality,
+        get_ai_cost,
+    )
+
+    async def _detect(detector: str, target: str) -> bool:
+        if detector == "embedding_drift":
+            return (await check_embedding_drift(target)).drift_detected
+        if detector == "search_quality":
+            return (await check_rag_quality(target)).degraded
+        if detector == "prompt_regression":
+            return (await check_prompt_regression(target)).regressed
+        return (await get_ai_cost(target)).spike_detected
+
+    cases = _load("ai_pipeline.jsonl")
+    correct = 0
+    print("\n=== ai-pipeline: detection accuracy (HEADLINE) ===")
+    for case in cases:
+        detector, target, inject = case["detector"], case["target"], case["inject"]
+        if inject:
+            await chaos.inject(detector, target)
+        else:
+            await chaos.clear(detector, target)
+        detected = await _detect(detector, target)
+        await chaos.clear(detector, target)
+        ok = detected == case["expected_detected"]
+        correct += ok
+        state = "FAULT " if inject else "HEALTHY"
+        print(f"[{'OK  ' if ok else 'WRONG'}] {detector:<18} {state} detected={detected!s:<5}")
+    print(f"\ndetection accuracy: {correct}/{len(cases)} = {correct / len(cases):.0%}\n")
+
+
+_COMMANDS = {
+    "graph": eval_graph,
+    "retrieval": eval_retrieval,
+    "verifier": eval_verifier,
+    "ai": eval_ai,
+}
 
 
 async def main() -> None:

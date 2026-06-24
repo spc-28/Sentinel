@@ -1,0 +1,8 @@
+{"detector": "embedding_drift", "target": "runbooks", "inject": true, "expected_detected": true, "root_cause": "embedding model changed, index not rebuilt"}
+{"detector": "embedding_drift", "target": "runbooks", "inject": false, "expected_detected": false, "root_cause": "healthy"}
+{"detector": "search_quality", "target": "runbooks", "inject": true, "expected_detected": true, "root_cause": "RAG retrieval quality dropped"}
+{"detector": "search_quality", "target": "runbooks", "inject": false, "expected_detected": false, "root_cause": "healthy"}
+{"detector": "prompt_regression", "target": "checkout-api", "inject": true, "expected_detected": true, "root_cause": "new prompt shipped with a regression"}
+{"detector": "prompt_regression", "target": "checkout-api", "inject": false, "expected_detected": false, "root_cause": "healthy"}
+{"detector": "cost_spike", "target": "checkout-api", "inject": true, "expected_detected": true, "root_cause": "AI cost spike"}
+{"detector": "cost_spike", "target": "checkout-api", "inject": false, "expected_detected": false, "root_cause": "healthy"}

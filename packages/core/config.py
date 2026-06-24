@@ -55,7 +55,7 @@ class Settings(BaseSettings):
 
     # --- LLM / agents ------------------------------------------------------
     anthropic_api_key: str | None = None
-    llm_model: str = "anthropic/claude-sonnet-4-6"  # LiteLLM model id; override via env
+    llm_model: str = "anthropic/claude-haiku-4-5"  # LiteLLM model id; override via env
     agent_max_steps: int = 15
 
     # --- Alert correlation -------------------------------------------------
