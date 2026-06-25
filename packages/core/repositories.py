@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.core.enums import GroupStatus, InvestigationStatus
@@ -19,6 +19,7 @@ from packages.core.models import (
     Incident,
     IncidentGroup,
     Investigation,
+    PastIncident,
     RCAReport,
     Runbook,
     Service,
@@ -91,6 +92,24 @@ class AlertRepository(BaseRepository[Alert]):
 class IncidentRepository(BaseRepository[Incident]):
     model = Incident
 
+    async def get_by_alert(self, alert_id: UUID) -> Incident | None:
+        result = await self.session.execute(
+            select(Incident)
+            .where(Incident.alert_id == alert_id)
+            .order_by(Incident.created_at.desc())
+        )
+        return result.scalars().first()
+
+    async def list_recent(
+        self, since: datetime, *, service_id: UUID | None = None, limit: int = 50
+    ) -> Sequence[Incident]:
+        stmt = select(Incident).where(Incident.started_at >= since)
+        if service_id is not None:
+            stmt = stmt.where(Incident.service_id == service_id)
+        stmt = stmt.order_by(Incident.started_at.desc()).limit(limit)
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
 
 class IncidentGroupRepository(BaseRepository[IncidentGroup]):
     model = IncidentGroup
@@ -113,6 +132,14 @@ class InvestigationRepository(BaseRepository[Investigation]):
             select(Investigation).where(Investigation.status == InvestigationStatus.running)
         )
         return result.scalars().all()
+
+    async def get_by_incident(self, incident_id: UUID) -> Investigation | None:
+        result = await self.session.execute(
+            select(Investigation)
+            .where(Investigation.incident_id == incident_id)
+            .order_by(Investigation.created_at.desc())
+        )
+        return result.scalars().first()
 
 
 class HypothesisRepository(BaseRepository[Hypothesis]):
@@ -140,6 +167,22 @@ class RCAReportRepository(BaseRepository[RCAReport]):
         )
         return result.scalar_one_or_none()
 
+    async def search(self, query: str, *, limit: int = 10) -> Sequence[RCAReport]:
+        like = f"%{query}%"
+        result = await self.session.execute(
+            select(RCAReport)
+            .where(
+                or_(
+                    RCAReport.root_cause.ilike(like),
+                    RCAReport.summary.ilike(like),
+                    RCAReport.recommended_fix.ilike(like),
+                )
+            )
+            .order_by(RCAReport.created_at.desc())
+            .limit(limit)
+        )
+        return result.scalars().all()
+
 
 class RunbookRepository(BaseRepository[Runbook]):
     model = Runbook
@@ -147,3 +190,57 @@ class RunbookRepository(BaseRepository[Runbook]):
     async def get_by_title(self, title: str) -> Runbook | None:
         result = await self.session.execute(select(Runbook).where(Runbook.title == title))
         return result.scalar_one_or_none()
+
+
+class PastIncidentRepository(BaseRepository[PastIncident]):
+    model = PastIncident
+
+    async def get_by_fingerprint(self, fingerprint: str) -> PastIncident | None:
+        """The single remembered incident for this fingerprint (not a merged pattern)."""
+        result = await self.session.execute(
+            select(PastIncident)
+            .where(PastIncident.fingerprint == fingerprint)
+            .where(PastIncident.is_pattern.is_(False))
+        )
+        return result.scalars().first()
+
+    async def list_by_fingerprint(self, fingerprint: str) -> Sequence[PastIncident]:
+        """Everything (incidents + pattern) sharing a fingerprint — for exact recall."""
+        result = await self.session.execute(
+            select(PastIncident).where(PastIncident.fingerprint == fingerprint)
+        )
+        return result.scalars().all()
+
+    async def get_pattern_by_fingerprint(self, fingerprint: str) -> PastIncident | None:
+        result = await self.session.execute(
+            select(PastIncident)
+            .where(PastIncident.fingerprint == fingerprint)
+            .where(PastIncident.is_pattern.is_(True))
+        )
+        return result.scalars().first()
+
+    async def get_by_investigation(self, investigation_id: UUID) -> PastIncident | None:
+        result = await self.session.execute(
+            select(PastIncident)
+            .where(PastIncident.investigation_id == investigation_id)
+            .where(PastIncident.is_pattern.is_(False))
+            .order_by(PastIncident.created_at.desc())
+        )
+        return result.scalars().first()
+
+    async def list_recent(self, *, limit: int = 200) -> Sequence[PastIncident]:
+        """Recent memories and patterns, newest first — the recall candidate pool."""
+        result = await self.session.execute(
+            select(PastIncident).order_by(PastIncident.last_seen_at.desc()).limit(limit)
+        )
+        return result.scalars().all()
+
+    async def list_incidents(self, *, limit: int = 1000) -> Sequence[PastIncident]:
+        """Raw memories only (excludes merged patterns) — input to the merge job."""
+        result = await self.session.execute(
+            select(PastIncident)
+            .where(PastIncident.is_pattern.is_(False))
+            .order_by(PastIncident.last_seen_at.desc())
+            .limit(limit)
+        )
+        return result.scalars().all()

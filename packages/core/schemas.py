@@ -226,6 +226,15 @@ class RCAReportRead(RCAReportBase, _Read):
     pass
 
 
+class SuggestFix(BaseModel):
+    investigation_id: UUID
+    root_cause: str | None
+    recommended_fix: str | None
+    revert_pr_url: str | None
+    revert_title: str | None
+    note: str
+
+
 # --- Runbook -------------------------------------------------------------
 class RunbookBase(BaseModel):
     title: str
@@ -245,6 +254,28 @@ class RunbookUpdate(BaseModel):
 
 class RunbookRead(RunbookBase, _Read):
     pass
+
+
+# --- Past incidents (memory) ---------------------------------------------
+class PastIncidentRead(_Read):
+    service: str
+    alert_type: str
+    fingerprint: str
+    title: str
+    root_cause: str
+    recommended_fix: str | None
+    confirmed_cause: str | None
+    match_score: float | None
+    weight: float
+    occurrences: int
+    is_pattern: bool
+    pattern_label: str | None
+
+
+class ConfirmCause(BaseModel):
+    """Human confirmation of an incident's real cause (re-weights the memory)."""
+
+    cause: str
 
 
 # --- Composite responses -------------------------------------------------
