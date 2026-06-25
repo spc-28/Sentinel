@@ -72,6 +72,20 @@ class Settings(BaseSettings):
     rag_quality_threshold: float = 0.5
     cost_spike_ratio: float = 2.5
 
+    # --- Memory (learning from past incidents) -----------------------------
+    memory_default_weight: float = 1.0  # trust a fresh memory until feedback says otherwise
+    memory_semantic_threshold: float = 0.6  # min similarity to be a recall candidate
+    memory_strong_match_threshold: float = 0.82  # score above which we start from the known cause
+    memory_merge_similarity: float = 0.85  # min similarity to cluster two memories into a pattern
+    memory_merge_min_cluster: int = 2  # distinct memories (or recurrences) needed to form a pattern
+    memory_merge_seconds: int = 21600  # background pattern-merge interval (6h)
+
+    # --- MCP (Sentinel server) ---------------------------------------------
+    sentinel_api_url: str = "http://localhost:8000"  # internal API the MCP server forwards to
+    mcp_api_key: str = "sentinel-dev-key"  # clients must send this in X-Sentinel-Key
+    mcp_host: str = "127.0.0.1"
+    mcp_port: int = 8765
+
     @property
     def postgres_dsn(self) -> str:
         return (
