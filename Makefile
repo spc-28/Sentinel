@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: install up down worker migrate migration seed graph-seed ingest-runbooks eval eval-retrieval eval-verifier eval-ai mcp-ai chaos lint format
+.PHONY: install up down worker migrate migration seed graph-seed ingest-runbooks eval eval-retrieval eval-verifier eval-ai mcp-ai mcp-sentinel chaos lint format
 
 install:  # sync all workspace deps
 	uv sync --all-packages
@@ -44,6 +44,9 @@ eval-ai:  # AI-pipeline detection accuracy (headline metric)
 
 mcp-ai:  # run the AI-pipeline MCP server (stdio)
 	uv run python apps/mcp-ai-pipeline/server.py
+
+mcp-sentinel:  # run the Sentinel MCP server (HTTP, API-key protected)
+	uv run python apps/mcp-sentinel/server.py
 
 chaos:  # inject an AI fault: make chaos FAULT=embedding_drift
 	uv run python -m scripts.chaos $(FAULT)
