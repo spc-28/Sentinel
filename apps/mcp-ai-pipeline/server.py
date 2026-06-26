@@ -1,13 +1,11 @@
 """MCP server exposing Sentinel's AI-pipeline health checks to any AI client.
 
 AI-pipeline health is exactly the kind of tool other AI clients want to call — an
-engineer in Cursor/Claude Desktop asking "is my RAG healthy?". That's a real
+engineer in Claude Code / Cursor asking "is my RAG healthy?". That's a real
 boundary, so MCP earns its place here (unlike internal data access = plain functions).
 
-Run from Claude Desktop with:
-    command: uv
-    args: ["run", "--directory", "/path/to/sentinel", "python",
-           "apps/mcp-ai-pipeline/server.py"]
+Registered as a stdio server in the project-scoped .mcp.json, or manually with:
+    claude mcp add ai-pipeline uv run python apps/mcp-ai-pipeline/server.py
 """
 
 from __future__ import annotations

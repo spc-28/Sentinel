@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "sentinel": {
+      "type": "http",
+      "url": "http://127.0.0.1:8765/mcp",
+      "headers": {
+        "X-Sentinel-Key": "${MCP_API_KEY:-sentinel-dev-key}"
+      }
+    },
+    "sentinel-ai-pipeline": {
+      "command": "uv",
+      "args": ["run", "python", "apps/mcp-ai-pipeline/server.py"]
+    }
+  }
+}

@@ -1,10 +1,12 @@
-"""The one MCP server: exposes Sentinel itself to AI clients (Claude Desktop, Cursor).
+"""The one MCP server: exposes Sentinel itself to AI clients (Claude Code, Cursor).
 
 Textbook MCP: exposing a service across a boundary so any AI client can use it — an
-engineer in their IDE can ask Sentinel to investigate without leaving the editor.
+engineer in Claude Code can ask Sentinel to investigate without leaving the editor.
 Thin by design: every tool just forwards to Sentinel's internal HTTP API.
 
 Runs in network (HTTP) mode, protected by an API key in the ``X-Sentinel-Key`` header.
+Register with: claude mcp add --transport http sentinel http://127.0.0.1:8765/mcp
+--header "X-Sentinel-Key: <key>"  (or use the project-scoped .mcp.json).
 """
 
 from __future__ import annotations
