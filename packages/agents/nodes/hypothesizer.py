@@ -41,6 +41,19 @@ async def _dependency_context(service: str) -> str:
 
 
 async def hypothesize(state: GraphState) -> dict[str, object]:
+    known_cause = state.get("known_cause")
+    if known_cause:
+        # Memory hit: start from the recalled cause; the verifier confirms it against
+        # the (lightweight) evidence instead of the model proposing causes from scratch.
+        hypothesis = HypothesisItem(
+            statement=known_cause,
+            description="Recalled from a similar past incident.",
+            confidence=0.8,
+            rank=1,
+        )
+        log.info("node.hypothesizer", source="memory", count=1)
+        return {"hypotheses": [hypothesis]}
+
     alert = state["alert"]
     evidence = state.get("evidence", [])
     evidence_text = "\n".join(

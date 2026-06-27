@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
@@ -186,3 +187,49 @@ class Runbook(UUIDMixin, TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(512), index=True)
     content: Mapped[str] = mapped_column(Text)
     tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list)
+
+
+class PastIncident(UUIDMixin, TimestampMixin, Base):
+    """A solved incident kept for reuse (Part 11 — learning from past incidents).
+
+    Rows come in two flavours, distinguished by ``is_pattern``:
+    a *memory* is one solved incident; a *pattern* is several similar memories
+    merged by the background job (e.g. "checkout slows every Monday 9am").
+    ``fingerprint`` (service + alert type + main error) drives fast exact recall;
+    ``embedding`` drives meaning-based recall; ``weight`` reflects how well past
+    reports matched human-confirmed causes and is used to rank recall.
+    """
+
+    __tablename__ = "past_incidents"
+
+    # Denormalised signature (services may come and go; keep the strings).
+    service: Mapped[str] = mapped_column(String(255), index=True)
+    alert_type: Mapped[str] = mapped_column(String(512))
+    main_error: Mapped[str] = mapped_column(Text)
+    fingerprint: Mapped[str] = mapped_column(String(64), index=True)
+    signature_text: Mapped[str] = mapped_column(Text)  # basis for embedding / lexical match
+
+    title: Mapped[str] = mapped_column(String(512))
+    root_cause: Mapped[str] = mapped_column(Text)
+    recommended_fix: Mapped[str | None] = mapped_column(Text)
+    investigation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("investigations.id", ondelete="SET NULL"), index=True
+    )
+    embedding: Mapped[list[float] | None] = mapped_column(ARRAY(Float))
+
+    # Weighting from human feedback.
+    confirmed_cause: Mapped[str | None] = mapped_column(Text)
+    match_score: Mapped[float | None] = mapped_column(Float)  # report vs confirmed cause, 0..1
+    weight: Mapped[float] = mapped_column(Float, default=1.0)  # recall trust, 0..1
+
+    # Pattern merging.
+    occurrences: Mapped[int] = mapped_column(Integer, default=1)
+    is_pattern: Mapped[bool] = mapped_column(Boolean, default=False)
+    pattern_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("past_incidents.id", ondelete="SET NULL"), index=True
+    )
+    pattern_label: Mapped[str | None] = mapped_column(Text)
+
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )

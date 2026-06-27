@@ -49,6 +49,9 @@ class GraphState(TypedDict, total=False):
     detector_notes: str
     evidence: Annotated[list[EvidenceItem], operator.add]
     investigator_rounds: int
+    tool_calls: Annotated[int, operator.add]  # evidence-tool invocations, summed across rounds
+    memory_hit: bool  # recalled a strong match and started from a known cause
+    known_cause: str | None  # recalled root cause the hypothesizer seeds from
     hypotheses: list[HypothesisItem]
     verified: list[VerifiedHypothesis]
     verify_attempts: int
@@ -62,6 +65,9 @@ def initial_state(alert: dict[str, Any]) -> GraphState:
         detector_notes="",
         evidence=[],
         investigator_rounds=0,
+        tool_calls=0,
+        memory_hit=False,
+        known_cause=None,
         hypotheses=[],
         verified=[],
         verify_attempts=0,

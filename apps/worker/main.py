@@ -20,6 +20,7 @@ from packages.core.queue import JobQueue
 from packages.graph.client import close_driver
 from packages.graph.refresh import refresh_map
 from packages.graph.store import seed_dependencies
+from packages.memory.patterns import merge_patterns
 from packages.rag import store as rag_store
 from packages.rag.logs_index import index_recent_logs
 from packages.tools.common import KNOWN_SERVICES
@@ -76,6 +77,17 @@ async def _ai_detector_loop() -> None:
         await asyncio.sleep(_AI_DETECTOR_SECONDS)
 
 
+async def _memory_merge_loop() -> None:
+    """Periodically merge similar past incidents into reusable patterns."""
+    interval = get_settings().memory_merge_seconds
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await merge_patterns()
+        except Exception as exc:  # noqa: BLE001 - memory optional
+            log.error("worker.memory_merge_failed", error=str(exc))
+
+
 async def run() -> None:
     settings = get_settings()
     configure_logging(level=settings.log_level, json_logs=settings.log_json)
@@ -92,6 +104,7 @@ async def run() -> None:
     refresh_task = asyncio.create_task(_graph_refresh_loop())
     log_index_task = asyncio.create_task(_log_index_loop())
     ai_detector_task = asyncio.create_task(_ai_detector_loop())
+    memory_merge_task = asyncio.create_task(_memory_merge_loop())
     try:
         while True:
             job = await queue.dequeue(block_seconds=5)
@@ -105,7 +118,7 @@ async def run() -> None:
         log.info("worker.shutdown")
         raise
     finally:
-        for task in (refresh_task, log_index_task, ai_detector_task):
+        for task in (refresh_task, log_index_task, ai_detector_task, memory_merge_task):
             task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await task

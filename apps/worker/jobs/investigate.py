@@ -156,6 +156,7 @@ async def _persist(investigation_id: UUID, final: GraphState) -> None:
                 timeline=[{"event": item} for item in report.timeline],
                 recommended_fix=report.suggested_fix,
             )
+            await _remember(session, investigation_id, final, report)
         await InvestigationRepository(session).update(
             investigation_id,
             status=InvestigationStatus.completed,
@@ -168,4 +169,30 @@ async def _persist(investigation_id: UUID, final: GraphState) -> None:
         investigation_id=str(investigation_id),
         hypotheses=len(hypotheses[:3]),
         has_report=report is not None,
+        tool_calls=final.get("tool_calls", 0),
+        memory_hit=final.get("memory_hit", False),
     )
+
+
+async def _remember(
+    session: AsyncSession, investigation_id: UUID, final: GraphState, report: Any
+) -> None:
+    """Save each real incident to memory so the next similar one is solved faster.
+
+    Runs alongside RCAReport persistence (both live here, not in the reporter node,
+    which owns no DB session). False alarms are not remembered.
+    """
+    if not final.get("is_real", True):
+        return
+    try:
+        from packages.memory.writer import remember
+
+        await remember(
+            session,
+            alert=final.get("alert") or {},
+            root_cause=report.root_cause,
+            recommended_fix=report.suggested_fix,
+            investigation_id=investigation_id,
+        )
+    except Exception as exc:  # noqa: BLE001 - memory optional, never fail the report
+        log.warning("investigate.memory_save_failed", error=str(exc))
