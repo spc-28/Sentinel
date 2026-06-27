@@ -15,6 +15,7 @@ from packages.core.repositories import (
 )
 from packages.core.schemas import (
     ConfirmCause,
+    CostStats,
     HypothesisRead,
     InvestigationDetail,
     InvestigationRead,
@@ -49,6 +50,18 @@ async def search_past_incidents(session: SessionDep, q: str) -> list[RCAReportRe
     """Search past RCA reports (root cause / summary / fix) for relevant history."""
     reports = await RCAReportRepository(session).search(q)
     return [RCAReportRead.model_validate(r) for r in reports]
+
+
+@router.get("/stats")
+async def cost_stats(session: SessionDep) -> CostStats:
+    """Average AI cost per investigation (observability view)."""
+    count, avg, total, tokens = await InvestigationRepository(session).cost_stats()
+    return CostStats(
+        investigations=count,
+        avg_cost_usd=round(avg, 6),
+        total_cost_usd=round(total, 6),
+        total_tokens=tokens,
+    )
 
 
 @router.get("/by-alert/{alert_id}")
