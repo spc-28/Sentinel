@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: install up down worker migrate migration seed graph-seed ingest-runbooks eval eval-retrieval eval-verifier eval-ai mcp-ai mcp-sentinel chaos lint format
+.PHONY: install up down langfuse worker migrate migration seed graph-seed ingest-runbooks eval eval-retrieval eval-verifier eval-ai mcp-ai mcp-sentinel chaos lint format
 
 install:  # sync all workspace deps
 	uv sync --all-packages
@@ -11,6 +11,9 @@ up: install  # start datastores (Postgres, Redis, Qdrant, Neo4j) + run the API
 
 down:  # stop datastores
 	$(COMPOSE) down
+
+langfuse:  # start Langfuse UI (http://localhost:3000, dev@sentinel.local / sentineldev)
+	$(COMPOSE) --profile observability up -d langfuse-db langfuse
 
 worker: install  # run the background worker
 	uv run python -m apps.worker.main

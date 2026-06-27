@@ -56,7 +56,41 @@ services:
       retries: 15
       start_period: 30s
 
+  # Observability (Part 12). Opt-in — only starts with `--profile observability`.
+  langfuse-db:
+    image: postgres:16
+    profiles: ["observability"]
+    environment:
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: langfuse
+      POSTGRES_DB: langfuse
+    volumes:
+      - langfusedb:/var/lib/postgresql/data
+
+  langfuse:
+    image: langfuse/langfuse:2
+    profiles: ["observability"]
+    depends_on:
+      - langfuse-db
+    ports:
+      - "${LANGFUSE_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:langfuse@langfuse-db:5432/langfuse
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT:-3000}
+      NEXTAUTH_SECRET: sentinel-dev-nextauth-secret
+      SALT: sentinel-dev-salt
+      TELEMETRY_ENABLED: "false"
+      # Headless init: provisions a project + these exact keys on first boot,
+      # so LANGFUSE_PUBLIC_KEY/SECRET_KEY in .env just work with no UI setup.
+      LANGFUSE_INIT_ORG_ID: sentinel
+      LANGFUSE_INIT_PROJECT_ID: sentinel
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: pk-lf-sentinel-dev
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: sk-lf-sentinel-dev
+      LANGFUSE_INIT_USER_EMAIL: dev@sentinel.local
+      LANGFUSE_INIT_USER_PASSWORD: sentineldev
+
 volumes:
   pgdata:
   qdrantdata:
   neo4jdata:
+  langfusedb:

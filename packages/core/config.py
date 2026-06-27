@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     mcp_host: str = "127.0.0.1"
     mcp_port: int = 8765
 
+    # --- Observability (Langfuse) ------------------------------------------
+    # Tracing is enabled only when both keys are set; cost tracking always runs.
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_host: str = "http://localhost:3000"
+
     @property
     def postgres_dsn(self) -> str:
         return (

@@ -68,5 +68,6 @@ module = [
     "torch.*",
     "scipy.*",
     "mcp.*",
+    "langfuse.*",
 ]
 ignore_missing_imports = true
