@@ -15,6 +15,7 @@ from collections.abc import Awaitable, Callable
 
 import structlog
 
+from packages.agents.observability import tool_span
 from packages.agents.state import EvidenceItem, GraphState
 from packages.memory.recall import Recollection, recall_for_alert
 from packages.tools.deploys import recent_deploys
@@ -27,18 +28,21 @@ log = structlog.get_logger()
 
 class _Meter:
     """Routes every tool call through one counter, so a memory-guided run can be
-    shown to touch fewer tools than a cold investigation."""
+    shown to touch fewer tools than a cold investigation. Each call is also a
+    Langfuse span, so the trace shows the exact tools an investigation used."""
 
     def __init__(self) -> None:
         self.calls = 0
 
     def run[T](self, fn: Callable[..., T], *args: object) -> T:
         self.calls += 1
-        return fn(*args)
+        with tool_span(f"tool:{fn.__name__}"):
+            return fn(*args)
 
     async def arun[T](self, fn: Callable[..., Awaitable[T]], *args: object, **kwargs: object) -> T:
         self.calls += 1
-        return await fn(*args, **kwargs)
+        with tool_span(f"tool:{fn.__name__}"):
+            return await fn(*args, **kwargs)
 
 
 def _first_round(service: str, meter: _Meter) -> list[EvidenceItem]:

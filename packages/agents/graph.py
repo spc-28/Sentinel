@@ -69,11 +69,16 @@ async def run_graph(
     State is checkpointed in Postgres after each node, so passing ``resume=True``
     (with input ``None``) continues an interrupted run from its last checkpoint.
     """
+    from packages.agents.observability import current_langchain_handler
+
     settings = get_settings()
     async with AsyncPostgresSaver.from_conn_string(settings.postgres_dsn) as saver:
         await saver.setup()
         graph = build_graph().compile(checkpointer=saver)
-        config = {"configurable": {"thread_id": thread_id}}
+        config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+        handler = current_langchain_handler()  # Langfuse timeline (nodes + LLM cost)
+        if handler is not None:
+            config["callbacks"] = [handler]
         payload = None if resume else initial_state(alert)
         final = await graph.ainvoke(payload, config=config)
         return cast(GraphState, final)
