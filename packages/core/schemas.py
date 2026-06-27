@@ -152,6 +152,18 @@ class InvestigationRead(InvestigationBase, _Read):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     error: str | None = None
+    cost_usd: float | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+
+
+class CostStats(BaseModel):
+    """Average AI cost per investigation (Part 12 observability view)."""
+
+    investigations: int
+    avg_cost_usd: float
+    total_cost_usd: float
+    total_tokens: int
 
 
 # --- Hypothesis ----------------------------------------------------------

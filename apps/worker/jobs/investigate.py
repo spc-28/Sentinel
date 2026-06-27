@@ -13,6 +13,7 @@ from uuid import UUID
 
 import structlog
 from packages.agents.graph import run_graph
+from packages.agents.observability import Usage, investigation_trace, track_usage
 from packages.agents.state import GraphState, HypothesisItem, VerifiedHypothesis
 from packages.core.db import session_factory
 from packages.core.enums import InvestigationStatus
@@ -103,20 +104,28 @@ async def recover_running() -> None:
 async def _run_and_persist(
     investigation_id: UUID, payload: dict[str, Any], *, resume: bool
 ) -> None:
-    try:
-        final = await run_graph(payload, str(investigation_id), resume=resume)
-    except Exception as exc:  # noqa: BLE001 - record failure, don't crash the worker
-        if resume:  # no usable checkpoint → start a fresh run
-            log.warning("investigate.resume_fresh", investigation_id=str(investigation_id))
-            try:
-                final = await run_graph(payload, str(investigation_id), resume=False)
-            except Exception as exc2:  # noqa: BLE001
-                await _mark_failed(investigation_id, str(exc2))
+    with (
+        investigation_trace(
+            f"investigation:{investigation_id}",
+            service=payload.get("service"),
+            investigation_id=str(investigation_id),
+        ),
+        track_usage() as usage,
+    ):
+        try:
+            final = await run_graph(payload, str(investigation_id), resume=resume)
+        except Exception as exc:  # noqa: BLE001 - record failure, don't crash the worker
+            if resume:  # no usable checkpoint → start a fresh run
+                log.warning("investigate.resume_fresh", investigation_id=str(investigation_id))
+                try:
+                    final = await run_graph(payload, str(investigation_id), resume=False)
+                except Exception as exc2:  # noqa: BLE001
+                    await _mark_failed(investigation_id, str(exc2))
+                    return
+            else:
+                await _mark_failed(investigation_id, str(exc))
                 return
-        else:
-            await _mark_failed(investigation_id, str(exc))
-            return
-    await _persist(investigation_id, final)
+    await _persist(investigation_id, final, usage)
 
 
 async def _mark_failed(investigation_id: UUID, error: str) -> None:
@@ -131,7 +140,7 @@ async def _mark_failed(investigation_id: UUID, error: str) -> None:
         await session.commit()
 
 
-async def _persist(investigation_id: UUID, final: GraphState) -> None:
+async def _persist(investigation_id: UUID, final: GraphState, usage: Usage) -> None:
     verified = final.get("verified") or []
     hypotheses: Sequence[HypothesisItem | VerifiedHypothesis] = (
         verified if verified else (final.get("hypotheses") or [])
@@ -161,6 +170,9 @@ async def _persist(investigation_id: UUID, final: GraphState) -> None:
             investigation_id,
             status=InvestigationStatus.completed,
             completed_at=datetime.now(UTC),
+            cost_usd=round(usage.cost_usd, 6),
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
         )
         await session.commit()
 
@@ -171,6 +183,7 @@ async def _persist(investigation_id: UUID, final: GraphState) -> None:
         has_report=report is not None,
         tool_calls=final.get("tool_calls", 0),
         memory_hit=final.get("memory_hit", False),
+        cost_usd=round(usage.cost_usd, 6),
     )
 
 

@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from packages.core.enums import GroupStatus, InvestigationStatus
@@ -140,6 +140,25 @@ class InvestigationRepository(BaseRepository[Investigation]):
             .order_by(Investigation.created_at.desc())
         )
         return result.scalars().first()
+
+    async def cost_stats(self) -> tuple[int, float, float, int]:
+        """(count, avg cost, total cost, total tokens) over investigations with a cost."""
+        result = await self.session.execute(
+            select(
+                func.count(Investigation.id),
+                func.coalesce(func.avg(Investigation.cost_usd), 0.0),
+                func.coalesce(func.sum(Investigation.cost_usd), 0.0),
+                func.coalesce(
+                    func.sum(
+                        func.coalesce(Investigation.input_tokens, 0)
+                        + func.coalesce(Investigation.output_tokens, 0)
+                    ),
+                    0,
+                ),
+            ).where(Investigation.cost_usd.is_not(None))
+        )
+        count, avg, total, tokens = result.one()
+        return int(count), float(avg), float(total), int(tokens)
 
 
 class HypothesisRepository(BaseRepository[Hypothesis]):

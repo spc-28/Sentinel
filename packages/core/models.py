@@ -134,6 +134,10 @@ class Investigation(UUIDMixin, TimestampMixin, Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error: Mapped[str | None] = mapped_column(Text)
+    # Observability (Part 12): filled from the LiteLLM cost callback per run.
+    cost_usd: Mapped[float | None] = mapped_column(Float)
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
 
 
 class Hypothesis(UUIDMixin, TimestampMixin, Base):

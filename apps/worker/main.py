@@ -13,6 +13,7 @@ from typing import Any
 import redis.asyncio as redis
 import structlog
 from packages.agents.ai_pipeline.detectors import run_all_detectors
+from packages.agents.observability import configure_observability
 from packages.core.config import get_settings
 from packages.core.db import dispose_engine
 from packages.core.logging import configure_logging
@@ -93,6 +94,7 @@ async def run() -> None:
     configure_logging(level=settings.log_level, json_logs=settings.log_json)
     redis_client = redis.from_url(settings.redis_url, decode_responses=True)
     queue = JobQueue(redis_client)
+    configure_observability()  # LiteLLM cost tracking + Langfuse tracing (if keys set)
     log.info("worker.startup", environment=settings.environment)
 
     try:
