@@ -146,8 +146,13 @@ async def _persist(investigation_id: UUID, final: GraphState, usage: Usage) -> N
         verified if verified else (final.get("hypotheses") or [])
     )
     report = final.get("report")
+    alert = final.get("alert") or {}
+    service_name = str(alert.get("service", "unknown"))
+    repo_url: str | None = None
 
     async with session_factory() as session:
+        service = await ServiceRepository(session).get_by_name(service_name)
+        repo_url = service.repo_url if service is not None else None
         hyp_repo = HypothesisRepository(session)
         for rank, hyp in enumerate(hypotheses[:3], start=1):  # DB allows rank 1..3
             await hyp_repo.create(
@@ -185,6 +190,21 @@ async def _persist(investigation_id: UUID, final: GraphState, usage: Usage) -> N
         memory_hit=final.get("memory_hit", False),
         cost_usd=round(usage.cost_usd, 6),
     )
+
+    # Deliver the report (email + optional GitHub issue). Never fail the run over it.
+    if report is not None and final.get("is_real", True):
+        try:
+            from apps.api.integrations.notify import notify_investigation_complete
+
+            await notify_investigation_complete(
+                investigation_id=investigation_id,
+                service=service_name,
+                alert_title=str(alert.get("title", service_name)),
+                report=report,
+                repo_url=repo_url,
+            )
+        except Exception as exc:  # noqa: BLE001 - delivery optional
+            log.warning("investigate.notify_failed", error=str(exc))
 
 
 async def _remember(
