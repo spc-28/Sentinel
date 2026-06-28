@@ -21,6 +21,7 @@ from packages.core.schemas import AlertWebhook
 from packages.graph.store import neighbors
 
 from apps.api.deps import QueueDep, SessionDep
+from apps.api.integrations.converters import datadog_to_alert, grafana_to_alerts
 
 log = structlog.get_logger()
 
@@ -49,8 +50,7 @@ async def _group_views(session: SessionDep, groups: list[Any]) -> list[GroupView
     ]
 
 
-@router.post("/alert", status_code=status.HTTP_202_ACCEPTED)
-async def receive_alert(
+async def _ingest_alert(
     payload: AlertWebhook, session: SessionDep, queue: QueueDep
 ) -> dict[str, Any]:
     """Persist an alert, correlate it into a group, and queue work only for new groups."""
@@ -139,3 +139,29 @@ async def receive_alert(
         "method": None,
         "investigation_triggered": True,
     }
+
+
+@router.post("/alert", status_code=status.HTTP_202_ACCEPTED)
+async def receive_alert(
+    payload: AlertWebhook, session: SessionDep, queue: QueueDep
+) -> dict[str, Any]:
+    """Ingest an alert in Sentinel's native format."""
+    return await _ingest_alert(payload, session, queue)
+
+
+@router.post("/grafana", status_code=status.HTTP_202_ACCEPTED)
+async def receive_grafana(
+    payload: dict[str, Any], session: SessionDep, queue: QueueDep
+) -> dict[str, Any]:
+    """Ingest a Grafana alerting webhook (may contain several firing alerts)."""
+    alerts = grafana_to_alerts(payload)
+    results = [await _ingest_alert(alert, session, queue) for alert in alerts]
+    return {"status": "accepted", "ingested": len(results), "results": results}
+
+
+@router.post("/datadog", status_code=status.HTTP_202_ACCEPTED)
+async def receive_datadog(
+    payload: dict[str, Any], session: SessionDep, queue: QueueDep
+) -> dict[str, Any]:
+    """Ingest a Datadog monitor webhook."""
+    return await _ingest_alert(datadog_to_alert(payload), session, queue)
