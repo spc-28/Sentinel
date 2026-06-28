@@ -92,6 +92,20 @@ class Settings(BaseSettings):
     langfuse_secret_key: str | None = None
     langfuse_host: str = "http://localhost:3000"
 
+    # --- Email reports (Gmail SMTP) ----------------------------------------
+    # Emails send only when user+password+recipient are set; otherwise logged.
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str | None = None  # your gmail address
+    smtp_password: str | None = None  # a Gmail App Password (needs 2FA)
+    email_from: str | None = None  # defaults to smtp_user
+    email_to: str | None = None  # report recipient
+    report_link_base: str = "http://localhost:8000/investigations"
+
+    @property
+    def email_enabled(self) -> bool:
+        return bool(self.smtp_user and self.smtp_password and self.email_to)
+
     @property
     def postgres_dsn(self) -> str:
         return (
