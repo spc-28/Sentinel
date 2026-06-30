@@ -14,6 +14,7 @@ from uuid import UUID
 import structlog
 from packages.agents.graph import run_graph
 from packages.agents.observability import Usage, investigation_trace, track_usage
+from packages.agents.routing import choose_model, routed_model
 from packages.agents.state import GraphState, HypothesisItem, VerifiedHypothesis
 from packages.core.db import session_factory
 from packages.core.enums import InvestigationStatus
@@ -104,13 +105,16 @@ async def recover_running() -> None:
 async def _run_and_persist(
     investigation_id: UUID, payload: dict[str, Any], *, resume: bool
 ) -> None:
+    model = choose_model(severity=str(payload.get("severity", "")), memory_hit=False)
     with (
         investigation_trace(
             f"investigation:{investigation_id}",
             service=payload.get("service"),
             investigation_id=str(investigation_id),
+            model=model,
         ),
         track_usage() as usage,
+        routed_model(model),
     ):
         try:
             final = await run_graph(payload, str(investigation_id), resume=resume)

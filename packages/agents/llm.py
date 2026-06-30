@@ -16,11 +16,19 @@ log = structlog.get_logger()
 
 
 def build_llm(*, max_tokens: int = 2048) -> ChatLiteLLM:
+    from packages.agents.routing import current_model_override
+
     settings = get_settings()
-    if settings.anthropic_api_key:
+    model = current_model_override() or settings.llm_model
+    kwargs: dict[str, Any] = {"model": model, "temperature": 0, "max_tokens": max_tokens}
+    if model == settings.local_llm_model:
+        # Local OpenAI-compatible server (the fine-tuned Qwen).
+        kwargs["api_base"] = settings.local_llm_base_url
+        kwargs["api_key"] = settings.local_llm_api_key
+    elif settings.anthropic_api_key:
         # LiteLLM reads the key from the environment; bridge it from Settings.
         os.environ.setdefault("ANTHROPIC_API_KEY", settings.anthropic_api_key)
-    return ChatLiteLLM(model=settings.llm_model, temperature=0, max_tokens=max_tokens)
+    return ChatLiteLLM(**kwargs)
 
 
 def text_of(content: Any) -> str:

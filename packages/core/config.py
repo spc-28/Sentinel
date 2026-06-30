@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     llm_model: str = "anthropic/claude-haiku-4-5"  # LiteLLM model id; override via env
     agent_max_steps: int = 15
 
+    # --- Local fine-tuned model + routing (Part 15 experiment) -------------
+    # A QLoRA-tuned Qwen 2.5 7B served locally (OpenAI-compatible). When routing is
+    # enabled, easy cases go to the local model and hard cases stay on Claude.
+    local_llm_model: str = "openai/qwen2.5-rca"
+    local_llm_base_url: str = "http://localhost:8001/v1"
+    local_llm_api_key: str = "local"  # the local server ignores it
+    model_routing_enabled: bool = False
+
     # --- Alert correlation -------------------------------------------------
     correlation_window_minutes: int = 5
     semantic_correlation_enabled: bool = False  # needs sentence-transformers installed
