@@ -1,6 +1,6 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: install up down langfuse worker migrate migration seed graph-seed ingest-runbooks eval eval-retrieval eval-verifier eval-ai mcp-ai mcp-sentinel chaos lint format
+.PHONY: install up down langfuse worker migrate migration seed graph-seed ingest-runbooks eval eval-retrieval eval-verifier eval-ai training-data finetune-compare mcp-ai mcp-sentinel chaos lint format
 
 install:  # sync all workspace deps
 	uv sync --all-packages
@@ -44,6 +44,12 @@ eval-verifier:  # verifier NLI accuracy eval
 
 eval-ai:  # AI-pipeline detection accuracy (headline metric)
 	uv run python -m scripts.eval ai
+
+training-data:  # build QLoRA training data: make training-data SYNTHETIC=200
+	uv run python -m scripts.build_training_data $(SYNTHETIC)
+
+finetune-compare:  # compare local fine-tuned model vs Claude (needs both served)
+	uv run python experiments/finetune/compare.py
 
 mcp-ai:  # run the AI-pipeline MCP server (stdio)
 	uv run python apps/mcp-ai-pipeline/server.py
