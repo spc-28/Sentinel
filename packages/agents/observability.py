@@ -114,9 +114,20 @@ def investigation_trace(name: str, **metadata: Any) -> Iterator[None]:
 
 
 def current_langchain_handler() -> Any | None:
-    """A LangChain callback handler bound to the current investigation trace, if any."""
+    """A LangChain callback handler bound to the current investigation trace, if any.
+
+    Langfuse's LangChain integration can be incompatible with the installed
+    langchain (e.g. langfuse 2.x + langchain 1.x), which raises on this call.
+    Tracing is optional, so degrade to no handler rather than failing the run.
+    """
     trace = _trace.get()
-    return trace.get_langchain_handler() if trace is not None else None
+    if trace is None:
+        return None
+    try:
+        return trace.get_langchain_handler()
+    except Exception as exc:  # noqa: BLE001 - optional tracing; never break an investigation
+        log.warning("observability.langchain_handler_unavailable", error=str(exc))
+        return None
 
 
 @contextlib.contextmanager

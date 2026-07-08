@@ -9,6 +9,7 @@ from typing import Any, cast
 
 import redis.asyncio as redis
 import structlog
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 log = structlog.get_logger()
 
@@ -34,8 +35,15 @@ class JobQueue:
         return job_id
 
     async def dequeue(self, *, block_seconds: int = 5) -> dict[str, Any] | None:
-        """Block up to ``block_seconds`` for the next job (requires a string client)."""
-        item = await self._client.brpop([self._key], timeout=block_seconds)
+        """Block up to ``block_seconds`` for the next job (requires a string client).
+
+        An idle blocking BRPOP can surface as a socket read timeout rather than a
+        nil reply; treat that as "no job this cycle" so the worker loop keeps going.
+        """
+        try:
+            item = await self._client.brpop([self._key], timeout=block_seconds)
+        except RedisTimeoutError:
+            return None
         if item is None:
             return None
         _key, raw = cast(tuple[str, str], item)

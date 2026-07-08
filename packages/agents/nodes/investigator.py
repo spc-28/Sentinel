@@ -45,10 +45,10 @@ class _Meter:
             return await fn(*args, **kwargs)
 
 
-def _first_round(service: str, meter: _Meter) -> list[EvidenceItem]:
-    summary = meter.run(summarize_logs, service, 60)
-    latency = meter.run(get_p95_latency, service, 60)
-    anomaly = meter.run(is_anomaly, service, "latency_ms", 30)
+def _first_round(service: str, meter: _Meter, incident: bool = False) -> list[EvidenceItem]:
+    summary = meter.run(summarize_logs, service, 60, incident)
+    latency = meter.run(get_p95_latency, service, 60, incident)
+    anomaly = meter.run(is_anomaly, service, "latency_ms", 30, incident)
     deploys = meter.run(recent_deploys, service, 1440)
     return [
         EvidenceItem(
@@ -70,10 +70,10 @@ def _first_round(service: str, meter: _Meter) -> list[EvidenceItem]:
     ]
 
 
-def _deeper_round(service: str, meter: _Meter) -> list[EvidenceItem]:
+def _deeper_round(service: str, meter: _Meter, incident: bool = False) -> list[EvidenceItem]:
     errors = meter.run(find_error_traces, service, 360)
     slow = meter.run(find_slow_traces, service, 500, 360)
-    recent = meter.run(get_recent_errors, service, 5)
+    recent = meter.run(get_recent_errors, service, 5, incident)
     return [
         EvidenceItem(
             source="traces",
@@ -88,10 +88,12 @@ def _deeper_round(service: str, meter: _Meter) -> list[EvidenceItem]:
     ]
 
 
-def _memory_confirm_round(service: str, recall: Recollection, meter: _Meter) -> list[EvidenceItem]:
+def _memory_confirm_round(
+    service: str, recall: Recollection, meter: _Meter, incident: bool = False
+) -> list[EvidenceItem]:
     """Memory hit: lead with the recalled cause, then gather just enough to confirm."""
     deploys = meter.run(recent_deploys, service, 1440)
-    anomaly = meter.run(is_anomaly, service, "latency_ms", 30)
+    anomaly = meter.run(is_anomaly, service, "latency_ms", 30, incident)
     fix = f" Prior fix: {recall.recommended_fix}" if recall.recommended_fix else ""
     return [
         EvidenceItem(
@@ -182,6 +184,7 @@ async def investigate(state: GraphState) -> dict[str, object]:
 
     alert = state["alert"]
     service = str(alert.get("service", "unknown"))
+    incident = bool(state.get("incident", False))
     round_number = state.get("investigator_rounds", 0) + 1
     meter = _Meter()
 
@@ -189,7 +192,7 @@ async def investigate(state: GraphState) -> dict[str, object]:
         recollections = await recall_for_alert(alert)
         top = recollections[0] if recollections else None
         if top is not None and top.is_strong:
-            items = _memory_confirm_round(service, top, meter)
+            items = _memory_confirm_round(service, top, meter, incident)
             log.info(
                 "node.investigator",
                 service=service,
@@ -207,7 +210,11 @@ async def investigate(state: GraphState) -> dict[str, object]:
                 "known_cause": top.root_cause,
             }
 
-    items = _first_round(service, meter) if round_number == 1 else _deeper_round(service, meter)
+    items = (
+        _first_round(service, meter, incident)
+        if round_number == 1
+        else _deeper_round(service, meter, incident)
+    )
     if round_number == 1:
         items.extend(await _rag_evidence(f"{alert.get('title', '')} {service}", meter))
         if is_ai_alert(alert):

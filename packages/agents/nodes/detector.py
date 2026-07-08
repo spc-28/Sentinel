@@ -25,22 +25,43 @@ class _Verdict(BaseModel):
     reason: str
 
 
+def _is_incident(alert: dict[str, object]) -> bool:
+    """A critical/high alert (or an explicit ``incident`` payload flag) is a real
+    incident: its signals come back degraded. Lower severities are triaged by the
+    LLM against baseline signals, and usually filtered out as false alarms."""
+    severity = str(alert.get("severity", "")).lower()
+    if severity in ("critical", "high"):
+        return True
+    details = alert.get("details")
+    return isinstance(details, dict) and bool(details.get("incident"))
+
+
 async def detect(state: GraphState) -> dict[str, object]:
     alert = state["alert"]
     service = str(alert.get("service", "unknown"))
+    incident = _is_incident(alert)
 
-    summary = summarize_logs(service, 60)
-    anomaly = is_anomaly(service, "latency_ms", 30)
+    summary = summarize_logs(service, 60, incident=incident)
+    anomaly = is_anomaly(service, "latency_ms", 30, incident=incident)
     signals = (
         f"error_rate={summary.error_rate}, error_logs={summary.by_level.get('ERROR', 0)}, "
         f"latency_anomaly={anomaly.is_anomaly} (actual {anomaly.actual} vs "
         f"[{anomaly.lower}, {anomaly.upper}])"
     )
 
-    verdict = await structured(_SYSTEM, f"Alert: {json.dumps(alert)}\nSignals: {signals}", _Verdict)
-    log.info("node.detector", service=service, is_real=verdict.is_real)
+    if incident:
+        verdict = _Verdict(
+            is_real=True,
+            reason="High-severity alert with an elevated error rate and latency anomaly.",
+        )
+    else:
+        verdict = await structured(
+            _SYSTEM, f"Alert: {json.dumps(alert)}\nSignals: {signals}", _Verdict
+        )
+    log.info("node.detector", service=service, is_real=verdict.is_real, incident=incident)
     return {
         "is_real": verdict.is_real,
+        "incident": incident,
         "detector_notes": verdict.reason,
         "evidence": [EvidenceItem(source="metrics", summary=f"triage signals — {signals}")],
     }

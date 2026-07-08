@@ -37,6 +37,10 @@ _PROFILES: dict[str, _Profile] = {
 }
 _DEFAULT_PROFILE = _Profile(base=100, amplitude=30, noise=10, unit="value")
 
+# How much a real incident inflates the *recent* value (history stays normal, so
+# the elevated recent window reads as a clear anomaly).
+_INCIDENT_MULTIPLIER = 3.5
+
 
 class MetricPoint(BaseModel):
     timestamp: datetime
@@ -74,7 +78,7 @@ def _service_factor(service: str) -> float:
     return rng("svc", service).uniform(0.7, 1.4)
 
 
-def _metric_value(service: str, metric: str, ts: datetime) -> float:
+def _metric_value(service: str, metric: str, ts: datetime, incident: bool = False) -> float:
     """Deterministic metric value for one timestamp (diurnal + noise + rare spike)."""
     profile = _PROFILES.get(metric, _DEFAULT_PROFILE)
     base = profile.base * _service_factor(service)
@@ -84,6 +88,8 @@ def _metric_value(service: str, metric: str, ts: datetime) -> float:
     value = base + profile.amplitude * diurnal + r.gauss(0, profile.noise)
     if r.random() < 0.02:  # rare spike → fuel for anomaly detection
         value *= r.uniform(2.0, 4.0)
+    if incident:
+        value *= _INCIDENT_MULTIPLIER
     value = max(profile.floor, value)
     if profile.ceiling is not None:
         value = min(profile.ceiling, value)
@@ -100,11 +106,13 @@ def get_metric(service: str, metric_name: str, last_n_minutes: int = 60) -> Metr
     return MetricSeries(service=service, metric=metric_name, unit=profile.unit, points=points)
 
 
-def get_p95_latency(service: str, last_n_minutes: int = 60) -> LatencySummary:
+def get_p95_latency(
+    service: str, last_n_minutes: int = 60, incident: bool = False
+) -> LatencySummary:
     """p50/p95/p99 request latency over the window (the slowest 5% is p95)."""
     samples: list[float] = []
     for minute in minute_range(last_n_minutes):
-        centre = _metric_value(service, "latency_ms", minute)
+        centre = _metric_value(service, "latency_ms", minute, incident)
         r = rng("latency-samples", service, minute.isoformat())
         samples.extend(max(1.0, r.gauss(centre, centre * 0.25)) for _ in range(r.randint(20, 60)))
     arr = np.array(samples)
@@ -125,11 +133,15 @@ def _history(service: str, metric: str, *, days: int = 14) -> tuple[list[datetim
     return stamps, [_metric_value(service, metric, ts) for ts in stamps]
 
 
-def is_anomaly(service: str, metric_name: str, last_n_minutes: int = 30) -> AnomalyResult:
+def is_anomaly(
+    service: str, metric_name: str, last_n_minutes: int = 30, incident: bool = False
+) -> AnomalyResult:
     """Is the recent value of ``metric_name`` unusual versus learned normal?"""
-    recent = [_metric_value(service, metric_name, ts) for ts in minute_range(last_n_minutes)]
+    recent = [
+        _metric_value(service, metric_name, ts, incident) for ts in minute_range(last_n_minutes)
+    ]
     actual = round(float(np.mean(recent)), 4)
-    stamps, values = _history(service, metric_name)
+    stamps, values = _history(service, metric_name)  # history stays normal (no incident)
 
     try:
         expected, lower, upper = _prophet_interval(stamps, values)

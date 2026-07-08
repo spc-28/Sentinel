@@ -74,11 +74,12 @@ class LogSummary(BaseModel):
     buckets: list[TimeBucket]
 
 
-def _entries_for_minute(service: str, minute: datetime) -> list[LogEntry]:
-    """Deterministic log lines for one service-minute (1–3% are errors)."""
+def _entries_for_minute(service: str, minute: datetime, incident: bool = False) -> list[LogEntry]:
+    """Deterministic log lines for one service-minute (1–3% errors normally; a
+    real incident elevates that to 18–45% so the signal is unmistakable)."""
     r = rng("logs", service, minute.isoformat())
     count = r.randint(8, 40)
-    error_rate = r.uniform(0.01, 0.03)
+    error_rate = r.uniform(0.18, 0.45) if incident else r.uniform(0.01, 0.03)
     entries: list[LogEntry] = []
     for _ in range(count):
         roll = r.random()
@@ -108,10 +109,10 @@ def _entries_for_minute(service: str, minute: datetime) -> list[LogEntry]:
     return entries
 
 
-def _window_entries(service: str, last_n_minutes: int) -> list[LogEntry]:
+def _window_entries(service: str, last_n_minutes: int, incident: bool = False) -> list[LogEntry]:
     entries: list[LogEntry] = []
     for minute in minute_range(last_n_minutes):
-        entries.extend(_entries_for_minute(service, minute))
+        entries.extend(_entries_for_minute(service, minute, incident))
     return entries
 
 
@@ -121,16 +122,16 @@ def search_logs(service: str, last_n_minutes: int = 60, search_text: str = "") -
     return [e for e in _window_entries(service, last_n_minutes) if needle in e.message.lower()]
 
 
-def get_recent_errors(service: str, limit: int = 20) -> list[LogEntry]:
+def get_recent_errors(service: str, limit: int = 20, incident: bool = False) -> list[LogEntry]:
     """The most recent ERROR-level logs for ``service`` (last 6h, newest first)."""
-    errors = [e for e in _window_entries(service, 360) if e.level is LogLevel.error]
+    errors = [e for e in _window_entries(service, 360, incident) if e.level is LogLevel.error]
     errors.sort(key=lambda e: e.timestamp, reverse=True)
     return errors[:limit]
 
 
-def summarize_logs(service: str, last_n_minutes: int = 60) -> LogSummary:
+def summarize_logs(service: str, last_n_minutes: int = 60, incident: bool = False) -> LogSummary:
     """Aggregate stats for a service's logs — counts, error rate, top errors, buckets."""
-    entries = _window_entries(service, last_n_minutes)
+    entries = _window_entries(service, last_n_minutes, incident)
     total = len(entries)
     by_level = Counter(e.level.value for e in entries)
     error_total = by_level.get(LogLevel.error.value, 0)

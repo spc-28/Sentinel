@@ -46,6 +46,7 @@ class ReportDoc(BaseModel):
 class GraphState(TypedDict, total=False):
     alert: dict[str, Any]
     is_real: bool
+    incident: bool  # a real incident → tools return elevated (degraded) signals
     detector_notes: str
     evidence: Annotated[list[EvidenceItem], operator.add]
     investigator_rounds: int
@@ -62,6 +63,7 @@ def initial_state(alert: dict[str, Any]) -> GraphState:
     return GraphState(
         alert=alert,
         is_real=True,
+        incident=False,
         detector_notes="",
         evidence=[],
         investigator_rounds=0,

@@ -4,8 +4,13 @@ An AI SRE platform that investigates production incidents — receiving alerts,
 running automated investigations across logs, metrics, traces and deploys, and
 surfacing findings.
 
-> **Status:** Part 1 — project scaffolding. A FastAPI server, a worker skeleton,
-> and local datastores wired together and startable with one command.
+When an alert fires (Grafana, Datadog, or a manual request), Sentinel runs a
+five-agent investigation: it detects the affected service, correlates signals
+across your telemetry, walks the service dependency graph to find likely blast
+radius, and draws on past incidents and runbooks to explain what happened. Each
+investigation produces a report with a root-cause hypothesis and a suggested fix,
+delivered to the chat, email, or a GitHub issue.
+
 
 ## Requirements
 
@@ -35,11 +40,9 @@ make down                     # stop datastores
 | -------------- | ---------------------------------------------- |
 | `make up`      | Start datastores, then run the API (foreground)|
 | `make infra`   | Start datastores only                          |
-| `make worker`  | Run the background worker                       |
-| `make down`    | Stop datastores                                 |
-| `make lint`    | Ruff lint + format check + mypy                |
-| `make format`  | Auto-format and auto-fix                        |
-| `make clean`   | Stop datastores and delete their volumes        |
+| `make worker`  | Run the background worker                      |
+| `make down`    | Stop datastores                                |
+| `make clean`   | Stop datastores and delete their volumes       |
 
 ## Layout
 
@@ -67,34 +70,40 @@ each app/package is a member; code is imported from the repo root
 
 ## Connect Sentinel to Claude Code
 
-`apps/mcp-sentinel` exposes Sentinel itself as **one MCP server** so you can ask it
-to investigate from **Claude Code** (or Cursor) — investigate an incident without
-leaving your editor. It runs over HTTP and is protected by an API key sent in the
-`X-Sentinel-Key` header.
+`apps/mcp-sentinel` exposes Sentinel as **one MCP server**, so you can investigate
+incidents from **Claude Code** (or Cursor) without leaving your editor. It runs over
+HTTP, authenticated with an API key in the `X-Sentinel-Key` header.
 
-1. Start the stack and the MCP server:
-   ```bash
-   make up             # datastores + API (terminal 1)
-   make worker         # investigation worker (terminal 2)
-   make mcp-sentinel   # MCP server on http://127.0.0.1:8765/mcp (terminal 3)
-   ```
-2. This repo ships a project-scoped [`.mcp.json`](.mcp.json), so Claude Code picks up
-   the `sentinel` server automatically when you open the project (approve it once when
-   prompted). The API key defaults to `sentinel-dev-key`; set `MCP_API_KEY` in your
-   `.env` to override it (the config reads `${MCP_API_KEY:-sentinel-dev-key}`).
+**1. Start the stack** (one terminal each):
 
-   To register it yourself instead — globally or in another project:
-   ```bash
-   claude mcp add --transport http sentinel http://127.0.0.1:8765/mcp \
-     --header "X-Sentinel-Key: sentinel-dev-key"
-   ```
-   Check it connected with `claude mcp list`.
-3. In Claude Code, ask:
-   > "What happened to checkout earlier? Investigate checkout-api latency."
+```bash
+make up             # datastores + API
+make worker         # investigation worker
+make mcp-sentinel   # MCP server on http://127.0.0.1:8765/mcp
+```
 
-   Claude calls `investigate`, Sentinel runs the five-agent graph, and the report
-   comes back in the chat. Other tools: `get_investigation`, `recent_incidents`,
-   `search_past_incidents`, `suggest_fix`.
+**2. Register the server.** This repo ships a project-scoped [`.mcp.json`](.mcp.json),
+so Claude Code picks up the `sentinel` server automatically when you open the project
+(approve it once when prompted).
 
-Tools: `investigate` · `get_investigation` · `recent_incidents` ·
-`search_past_incidents` · `suggest_fix`.
+To register it yourself instead — globally or in another project:
+
+```bash
+claude mcp add --transport http sentinel http://127.0.0.1:8765/mcp \
+  --header "X-Sentinel-Key: sentinel-dev-key"
+```
+
+Verify it connected with `claude mcp list`.
+
+**3. Ask Claude to investigate:**
+
+> "What happened to checkout earlier? Investigate checkout-api latency."
+
+Claude calls `investigate`, Sentinel runs the five-agent graph, and the report comes
+back in the chat.
+
+**API key:** defaults to `sentinel-dev-key`. Override it by setting `MCP_API_KEY` in
+your `.env` (the config reads `${MCP_API_KEY:-sentinel-dev-key}`).
+
+
+

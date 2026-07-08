@@ -1,16 +1,24 @@
 COMPOSE := docker compose -f infra/docker-compose.yml
 
-.PHONY: install up down langfuse worker migrate migration seed graph-seed ingest-runbooks eval eval-retrieval eval-verifier eval-ai training-data finetune-compare mcp-ai mcp-sentinel chaos lint format
+.PHONY: install up down stop stop-all langfuse worker migrate migration seed graph-seed ingest-runbooks eval eval-retrieval eval-verifier eval-ai training-data finetune-compare mcp-ai mcp-sentinel chaos lint format
 
 install:  # sync all workspace deps
 	uv sync --all-packages
 
-up: install  # start datastores (Postgres, Redis, Qdrant, Neo4j) + run the API
-	$(COMPOSE) up -d
+up: install  # start datastores (Postgres, Redis, Qdrant, Neo4j) + Langfuse + run the API
+	$(COMPOSE) --profile observability up -d
 	uv run uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
 
 down:  # stop datastores
 	$(COMPOSE) down
+
+stop:  # stop host processes (API, worker, dashboard); frees ports 8000/5173
+	@# bracket trick ([u]) keeps the pattern from matching pkill's own command line
+	@-pkill -f "[u]vicorn apps.api.main:app" && echo "stopped API" || echo "API not running"
+	@-pkill -f "[a]pps.worker.main" && echo "stopped worker" || echo "worker not running"
+	@-pkill -f "[a]pps/dashboard/node_modules/.bin/vite" && echo "stopped dashboard" || echo "dashboard not running"
+
+stop-all: stop down  # stop everything: host processes + datastores
 
 langfuse:  # start Langfuse UI (http://localhost:3000, dev@sentinel.local / sentineldev)
 	$(COMPOSE) --profile observability up -d langfuse-db langfuse
